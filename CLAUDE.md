@@ -50,7 +50,7 @@ This is a Python project. When setting up:
 Please use this section to keep track of high-level objectives and their status. Copy the contents over to `README.md` whenever you update this section.
 
 ### Objectives
-- [ ] Set up virtual environment
-- [ ] Set up local PostgreSQL database (titled `nba_pbp`)
+- [x] Set up virtual environment
+- [x] Set up local PostgreSQL database (titled `nba_pbp`)
 - [ ] Set up web scraping
 - [ ] Create tests for web scraping
