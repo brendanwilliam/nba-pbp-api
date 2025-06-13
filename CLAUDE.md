@@ -51,6 +51,6 @@ Please use this section to keep track of high-level objectives and their status.
 
 ### Objectives
 - [x] Set up virtual environment
-- [ ] Set up local PostgreSQL database (titled `nba_pbp`)
+- [x] Set up local PostgreSQL database (titled `nba_pbp`)
 - [ ] Set up web scraping
 - [ ] Create tests for web scraping
