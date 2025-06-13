@@ -50,7 +50,22 @@ This is a Python project. When setting up:
 Please use this section to keep track of high-level objectives and their status. Copy the contents over to `README.md` whenever you update this section.
 
 ### Objectives
-- [x] Set up virtual environment
-- [x] Set up local PostgreSQL database (titled `nba_pbp`)
-- [ ] Set up web scraping
-- [ ] Create tests for web scraping
+- [ ] Create plans for all objectives
+- [ ] Start small batch test scraping of NBA.com game pages (December, 2024) to ensure functionality
+- [ ] Create a systematic plan to scrape all games from the 1996-97 season to the 2024-25 season
+- [ ] Scrape all game URLs and add them to the scraping queue
+- [ ] Scrape all games in the scraping queue and save the JSON at `#__NEXT_DATA__` to the database
+- [ ] Analyze the JSON data and design database schema that captures all endpoints from the JSON
+- [ ] Implement the database schema
+- [ ] Use JSON data to populate the tables in the database
+- [ ] Migrate the database to the cloud
+- [ ] Create REST API endpoints for querying the database
+- [ ] Create MCP server for LLM integration
+- [ ] Create documentation for the API and MCP server
+- [ ] Create a website for testing the API and MCP server
+- [ ] Plan how to create a userbase for the API and MCP servers
+- [ ] Plan how to make money from the API and MCP servers
+- [ ] Plan how to scale the API and MCP servers
+- [ ] Plan how to maintain the API and MCP servers
+- [ ] Plan how to update the API and MCP servers
+
