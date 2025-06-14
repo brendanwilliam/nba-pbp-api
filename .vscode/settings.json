@@ -1,0 +1,14 @@
+{
+    "sqltools.connections": [
+        {
+            "previewLimit": 50,
+            "server": "localhost",
+            "port": 5432,
+            "driver": "PostgreSQL",
+            "name": "nba-pbp-api",
+            "group": "personal",
+            "database": "nba_pbp",
+            "username": "brendan"
+        }
+    ]
+}

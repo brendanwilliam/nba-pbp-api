@@ -7,10 +7,14 @@ from typing import List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
 
-from ..core.database import get_db
-from ..core.models import Game, Team, ScrapeQueue, RawGameData
-from .game_url_scraper import GameURLScraper
-from .game_data_scraper import GameDataScraper
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+
+from core.database import get_db
+from core.models import Game, Team, ScrapeQueue, RawGameData
+from scrapers.game_url_scraper import GameURLScraper
+from scrapers.game_data_scraper import GameDataScraper
 
 logger = logging.getLogger(__name__)
 
