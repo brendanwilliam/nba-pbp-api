@@ -51,7 +51,7 @@ Please use this section to keep track of high-level objectives and their status.
 
 ### Objectives
 - [x] Create plans for all objectives
-- [ ] Start small batch test scraping of NBA.com game pages (December, 2024) to ensure functionality
+- [x] Start small batch test scraping of NBA.com game pages (December, 2024) to ensure functionality
 - [ ] Create a systematic plan to scrape all games from the 1996-97 season to the 2024-25 season
 - [ ] Scrape all game URLs and add them to the scraping queue
 - [ ] Scrape all games in the scraping queue and save the JSON at `#__NEXT_DATA__` to the database

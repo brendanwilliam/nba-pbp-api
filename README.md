@@ -35,6 +35,7 @@ This project's goal is to scrape all NBA play-by-play data from the NBA's websit
 - [x] Set up local PostgreSQL database (titled `nba_pbp`)
 - [x] Set up web scraping
 - [x] Create tests for web scraping
+- [x] Successfully test scraped 30 games from December 2024 (100% success rate)
 
 ## Scraping
 All scraper scripts for this project are located in the `scrapers` directory. The procedure for scraping is as follows:
