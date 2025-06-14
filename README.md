@@ -1,7 +1,12 @@
-# nba-pbp-api
-Date: 2025-06-13
-Author: Brendan Keane
-Purpose: To create an API for NBA play-by-play data.
+# NBA Play-by-Play Data API
+
+Date: 2025-06-14  
+Author: Brendan Keane  
+Purpose: Comprehensive NBA play-by-play data API with scraping, storage, and query capabilities.
+
+## Project Overview
+
+This project scrapes NBA play-by-play data from the official NBA website, stores it in PostgreSQL, and provides both REST API and MCP server interfaces for querying the data. The system handles all NBA games from the 1996-97 season through 2024-25.
 
 ## Setup
 
@@ -25,36 +30,114 @@ Purpose: To create an API for NBA play-by-play data.
    cp .env.example .env
    # Edit .env with your database credentials and configuration
    ```
-5. Set up your PostgreSQL database (see Database section below)
+5. Set up your PostgreSQL database and run migrations:
+   ```bash
+   alembic upgrade head
+   ```
 
-### Project Goal
-This project's goal is to scrape all NBA play-by-play data from the NBA's website and to save it in a PostgreSQL database. The API will then be used to query the database for specific play-by-play data.
+## Architecture
 
-### Current Status
-- [x] Set up virtual environment
-- [x] Set up local PostgreSQL database (titled `nba_pbp`)
-- [x] Set up web scraping
-- [x] Create tests for web scraping
-- [x] Successfully test scraped 30 games from December 2024 (100% success rate)
+The project follows a modular architecture:
 
-## Scraping
-All scraper scripts for this project are located in the `scrapers` directory. The procedure for scraping is as follows:
+- **src/scrapers/**: Web scraping logic for NBA.com game data
+  - `team_mapping.py`: NBA team abbreviation mapping with historical changes
+  - `game_url_generator.py`: URL discovery and generation system
+  - `url_validator.py`: URL accessibility and content validation
+  - `game_data_scraper.py`: JSON data extraction from game pages
+  - `scraping_manager.py`: Coordinated scraping operations
 
-### 1. Search the NBA's game page for all games played on a specific date.
-The NBA website allows users to look up games by date. The URL for this page is `https://www.nba.com/games?date={date}` where `{date}` is the date in the format `YYYY-MM-DD`. For example, all games played on June 11th, 2025 will be found at `https://www.nba.com/games?date=2025-06-11`.
+- **src/core/**: Core business logic and data models
+  - `database.py`: Database connection and session management
+  - `models.py`: SQLAlchemy models for all database tables
 
-The game URLs on this page are found in the `main` and have a URL structure of `https://www.nba.com/game/{awayTeamTricode}-{homeTeamTricode}-{gameId}` where `{awayTeamTricode}` is the away team's tricode, `{homeTeamTricode}` is the home team's tricode, and `{gameId}` is the game ID. For example, the game between the Boston Celtics and the Orlando Magic on April 9th, 2025 will be found at `https://www.nba.com/game/bos-vs-orl-0022401156`.
+- **src/database/**: Database schema and queue management
+  - `queue_schema.sql`: Enhanced scraping queue structure
+  - `queue_manager.py`: Queue operations and status tracking
 
-### 2. Process URLs for a given date.
-There will be a number of links on the page with the URL structure of `https://www.nba.com/game/{awayTeamTricode}-{homeTeamTricode}-{gameId}` with suffixes like `?watchfullgame` or `/boxscore#boxscore`. We want to scrape a set of URLs that end in `{gameId}`. These will be added to our scraping queue.
+- **src/scripts/**: Execution scripts and utilities
+  - `build_game_url_queue.py`: Main script for URL queue generation
+  - `test_queue_offline.py`: Comprehensive testing framework
+  - `demo_queue_building.py`: Working demonstration
 
-The scraping queue will save the game ID, away team ID, home team ID, game date, and game URL to a table in the database. The scraping queue will also keep the status of whether the game has been scraped or not.
+- **src/api/**: RESTful API endpoints (planned)
+- **src/analytics/**: Data analysis and insights (planned)
 
-### 3. Scrape game URLs.
-For each game in the scraping queue, we will scrape the game URL and save the full JSON at `#__NEXT_DATA__` to a table in the database. This JSON not only contains play-by-play data, but also box score and event metadata. We will use this data to populate our database tables.
+## Current Status
 
-### 4. Populate database tables.
-For each game that has been scraped, we will populate our database tables with the data from the JSON at `#__NEXT_DATA__`. The database schema for this will depend on what data is present in these JSON files. We will create a strategy for this later.
+### Completed Objectives ✅
+- [x] Create plans for all objectives
+- [x] Start small batch test scraping of NBA.com game pages (December 2024)
+- [x] Create systematic plan to scrape all games from 1996-97 to 2024-25 seasons
+- [x] **Build comprehensive game URL queue system (30,000+ games)**
+- [x] **Implement team mapping with historical changes (relocations, name changes)**
+- [x] **Create URL validation and accessibility testing**
+- [x] **Set up enhanced database schema with proper indexing**
+
+### In Progress 🔄
+- [ ] Execute mass game scraping from populated URL queue
+- [ ] Analyze JSON data and design comprehensive database schema
+- [ ] Implement complete database schema for parsed data
+
+### Planned 📋
+- [ ] Use JSON data to populate normalized database tables
+- [ ] Migrate database to cloud infrastructure
+- [ ] Create REST API endpoints for querying data
+- [ ] Create MCP server for LLM integration
+- [ ] Create documentation and testing interfaces
+- [ ] Plan scaling, monetization, and maintenance strategies
+
+## Scraping System
+
+The scraping system operates in multiple phases:
+
+### 1. URL Queue Generation (Phase 1 - Completed ✅)
+- **Discovery**: Systematic discovery of all NBA games from 1996-2025
+- **URL Generation**: Creates `https://www.nba.com/game/{away}-vs-{home}-{gameId}` patterns
+- **Team Mapping**: Handles team relocations (Seattle→OKC, New Jersey→Brooklyn, etc.)
+- **Queue Population**: Stores ~30,000 game URLs in `game_url_queue` table with metadata
+- **Validation**: URL accessibility and content verification system
+
+### 2. Mass Game Scraping (Phase 2 - Next)
+- **Execution**: Process queued URLs to extract `#__NEXT_DATA__` JSON
+- **Rate Limiting**: Respectful scraping with 1-2 second delays
+- **Progress Tracking**: Real-time monitoring and error handling
+- **Data Storage**: Raw JSON preservation in `raw_game_data` table
+
+### 3. Data Analysis & Schema Design (Phase 3)
+- **JSON Analysis**: Examine structure across different seasons
+- **Schema Design**: Create normalized tables for play-by-play, box scores, metadata
+- **Data Validation**: Ensure completeness and accuracy
+
+### 4. Database Population (Phase 4)
+- **Data Parsing**: Extract structured data from raw JSON
+- **Table Population**: Populate normalized database tables
+- **Index Creation**: Optimize for query performance
+
+## Usage
+
+### Build Game URL Queue
+```bash
+# Build complete queue (all seasons 1996-2025)
+python -m src.scripts.build_game_url_queue
+
+# Build specific seasons
+python -m src.scripts.build_game_url_queue --seasons 2023-24 2024-25
+
+# Validate existing URLs
+python -m src.scripts.build_game_url_queue --validate-only
+
+# View queue statistics
+python -m src.scripts.build_game_url_queue --stats-only
+```
+
+### Run Tests
+```bash
+# Offline functionality tests
+python -m src.scripts.test_queue_offline
+
+# Demo with sample data
+python -m src.scripts.demo_queue_building
+```
 
 
 ## Database

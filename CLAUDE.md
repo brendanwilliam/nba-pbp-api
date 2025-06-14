@@ -15,21 +15,43 @@ This is an NBA play-by-play data API project that scrapes game data from the off
 
 ## Architecture
 
-The project follows a modular architecture:
+The project follows a modular architecture with completed and planned components:
+
+### Completed Components ✅
 
 - **src/scrapers/**: Web scraping logic for NBA.com game data
-  - Scrapes from `nba.com/games?date={YYYY-MM-DD}` to find game URLs
-  - Extracts data from `#__NEXT_DATA__` JSON in game pages
-  - Manages scraping queue with status tracking
+  - `team_mapping.py`: NBA team abbreviation mapping with historical changes (relocations, name changes)
+  - `game_url_generator.py`: URL discovery and generation system for all seasons 1996-2025
+  - `url_validator.py`: URL accessibility and content validation with concurrent processing
+  - `game_data_scraper.py`: JSON data extraction from `#__NEXT_DATA__` script tags
+  - `scraping_manager.py`: Coordinated scraping operations with queue management
 
 - **src/core/**: Core business logic and data models
+  - `database.py`: Database connection and session management
+  - `models.py`: SQLAlchemy models for teams, games, players, queue management
+
+- **src/database/**: Database schema and queue management
+  - `queue_schema.sql`: Enhanced scraping queue structure with comprehensive indexing
+  - `queue_manager.py`: Queue operations, status tracking, and progress monitoring
+
+- **src/scripts/**: Execution scripts and utilities
+  - `build_game_url_queue.py`: Main script for URL queue generation and management
+  - `test_queue_offline.py`: Comprehensive testing framework for all components
+  - `demo_queue_building.py`: Working demonstration with sample data
+
+### Planned Components 📋
 
 - **src/api/**: RESTful API endpoints for querying scraped data
   - Query plays by team, player, game, time, date, shot clock, score
 
 - **src/analytics/**: Data analysis and insights generation
 
-- **Database**: PostgreSQL for storing games, play-by-play events, box scores, and metadata
+### Database Infrastructure ✅
+
+- **PostgreSQL**: Enhanced schema for storing games, play-by-play events, box scores, and metadata
+- **Tables**: `teams`, `games`, `players`, `game_url_queue`, `raw_game_data`, `scrape_queue`
+- **Indexing**: Optimized for status, season, date, and priority-based queries
+- **Migration System**: Alembic-based schema versioning
 
 ## Development Setup
 
@@ -50,22 +72,31 @@ This is a Python project. When setting up:
 Please use this section to keep track of high-level objectives and their status. Copy the contents over to `README.md` whenever you update this section.
 
 ### Objectives
+
+#### Completed Objectives ✅
 - [x] Create plans for all objectives
-- [x] Start small batch test scraping of NBA.com game pages (December, 2024) to ensure functionality
-- [ ] Create a systematic plan to scrape all games from the 1996-97 season to the 2024-25 season
-- [ ] Scrape all game URLs and add them to the scraping queue
-- [ ] Scrape all games in the scraping queue and save the JSON at `#__NEXT_DATA__` to the database
-- [ ] Analyze the JSON data and design database schema that captures all endpoints from the JSON
-- [ ] Implement the database schema
-- [ ] Use JSON data to populate the tables in the database
-- [ ] Migrate the database to the cloud
-- [ ] Create REST API endpoints for querying the database
-- [ ] Create MCP server for LLM integration
-- [ ] Create documentation for the API and MCP server
-- [ ] Create a website for testing the API and MCP server
-- [ ] Plan how to create a userbase for the API and MCP servers
-- [ ] Plan how to make money from the API and MCP servers
-- [ ] Plan how to scale the API and MCP servers
-- [ ] Plan how to maintain the API and MCP servers
-- [ ] Plan how to update the API and MCP servers
+- [x] Start small batch test scraping of NBA.com game pages (December 2024) to ensure functionality
+- [x] Create a systematic plan to scrape all games from the 1996-97 season to the 2024-25 season
+- [x] **Build comprehensive game URL queue system (~30,000 games)**
+- [x] **Implement team mapping with historical changes (relocations, name changes)**
+- [x] **Create URL validation and accessibility testing framework**
+- [x] **Set up enhanced database schema with proper indexing**
+
+#### In Progress 🔄
+- [ ] Execute mass game scraping from populated URL queue (Plan 08)
+- [ ] Analyze JSON data and design comprehensive database schema (Plan 09)
+- [ ] Implement complete database schema for parsed data (Plan 10)
+
+#### Planned 📋
+- [ ] Use JSON data to populate normalized database tables (Plan 11)
+- [ ] Migrate database to cloud infrastructure (Plan 12)
+- [ ] Create REST API endpoints for querying the database (Plan 13)
+- [ ] Create MCP server for LLM integration (Plan 14)
+- [ ] Create documentation for the API and MCP server (Plan 15)
+- [ ] Create a website for testing the API and MCP server (Plan 16)
+- [ ] Plan how to create a userbase for the API and MCP servers (Plan 17)
+- [ ] Plan how to make money from the API and MCP servers (Plan 18)
+- [ ] Plan how to scale the API and MCP servers (Plan 19)
+- [ ] Plan how to maintain the API and MCP servers (Plan 20)
+- [ ] Plan how to update the API and MCP servers (Plan 21)
 
