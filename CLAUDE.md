@@ -50,7 +50,7 @@ This is a Python project. When setting up:
 Please use this section to keep track of high-level objectives and their status. Copy the contents over to `README.md` whenever you update this section.
 
 ### Objectives
-- [ ] Create plans for all objectives
+- [x] Create plans for all objectives
 - [ ] Start small batch test scraping of NBA.com game pages (December, 2024) to ensure functionality
 - [ ] Create a systematic plan to scrape all games from the 1996-97 season to the 2024-25 season
 - [ ] Scrape all game URLs and add them to the scraping queue
