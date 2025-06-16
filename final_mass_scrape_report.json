@@ -1,0 +1,64 @@
+{
+  "timestamp": "2025-06-14T14:48:30.788547",
+  "queue_statistics": {
+    "queue_counts": {
+      "pending": 0,
+      "in_progress": 0,
+      "completed": 4,
+      "failed": 0,
+      "invalid": 0,
+      "total": 4
+    },
+    "performance": {
+      "avg_response_time_ms": "1062.0000000000000000",
+      "median_response_time_ms": 935.0,
+      "total_data_mb": "1.3931827545166016",
+      "avg_data_kb": "356.6547851562500000"
+    },
+    "rate": {
+      "completed_last_hour": 4,
+      "completed_last_day": 4
+    },
+    "session_id": "5a761927-624b-41f8-a344-d41b82431c7b",
+    "timestamp": "2025-06-14T14:48:30.774825"
+  },
+  "season_progress": [
+    {
+      "season": "2019-20",
+      "total_games": 2,
+      "completed": 2,
+      "failed": 0,
+      "invalid": 0,
+      "pending": 0,
+      "in_progress": 0,
+      "completion_percentage": "100.00",
+      "season_start": "2019-10-22",
+      "season_end": "2020-09-30"
+    },
+    {
+      "season": "2024-25",
+      "total_games": 2,
+      "completed": 2,
+      "failed": 0,
+      "invalid": 0,
+      "pending": 0,
+      "in_progress": 0,
+      "completion_percentage": "100.00",
+      "season_start": "2024-12-01",
+      "season_end": "2024-12-02"
+    }
+  ],
+  "performance_metrics": {
+    "completion_percentage": 100.0,
+    "current_rate_per_hour": 4,
+    "estimated_completion": null,
+    "completed_last_hour": 4,
+    "completed_last_day": 4
+  },
+  "error_analysis": {
+    "error_types": {},
+    "error_codes": {},
+    "total_failed_analyzed": 0
+  },
+  "recent_failures": []
+}
