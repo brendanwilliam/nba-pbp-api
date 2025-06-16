@@ -145,6 +145,32 @@ class GameURLGenerator:
         logger.info(f"Season {season}: discovered {len(all_games)} games")
         return all_games
     
+    async def discover_games_for_dates(self, dates: List[date], season: str) -> List[GameURLInfo]:
+        """Discover games for a specific list of dates."""
+        logger.info(f"Discovering games for {len(dates)} specific dates in season {season}")
+        
+        # Sort dates for better logging
+        sorted_dates = sorted(dates)
+        logger.info(f"Date range: {sorted_dates[0]} to {sorted_dates[-1]}")
+        
+        # Use the existing batch processing method
+        all_games = await self._process_date_batch(sorted_dates, season)
+        
+        logger.info(f"Found {len(all_games)} games for the specified dates")
+        
+        # Log games found per date for debugging
+        games_by_date = {}
+        for game in all_games:
+            date_key = game.game_date.isoformat()
+            if date_key not in games_by_date:
+                games_by_date[date_key] = 0
+            games_by_date[date_key] += 1
+        
+        for date_str, count in sorted(games_by_date.items()):
+            logger.info(f"  {date_str}: {count} games")
+        
+        return all_games
+    
     async def _process_date_batch(self, dates: List[date], season: str) -> List[GameURLInfo]:
         """Process a batch of dates concurrently."""
         tasks = []

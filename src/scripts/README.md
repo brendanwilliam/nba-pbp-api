@@ -10,6 +10,7 @@ This module contains executable Python scripts for managing NBA game scraping op
 
 **Command Line Arguments**:
 - `--seasons` (list): Specific seasons to process
+- `--dates` (list): Specific dates to process (supports YYYY-MM-DD, YYYYMMDD, or MM/DD/YYYY formats)
 - `--validate` (flag): Validate URLs after generation
 - `--validate-only` (flag): Only validate existing URLs in the queue
 - `--stats-only` (flag): Show queue statistics without building
@@ -24,6 +25,12 @@ python src/scripts/build_game_url_queue.py
 # Build queue for specific seasons with validation
 python src/scripts/build_game_url_queue.py --seasons 2023-24 2024-25 --validate
 
+# Build queue for specific dates (useful for fixing missing dates)
+python src/scripts/build_game_url_queue.py --dates 2024-12-25 2024-12-26 --validate
+
+# Build queue for specific dates with different formats
+python src/scripts/build_game_url_queue.py --dates 2024-12-25 20241226 12/27/2024
+
 # Just show statistics
 python src/scripts/build_game_url_queue.py --stats-only
 
@@ -35,13 +42,17 @@ python src/scripts/build_game_url_queue.py --validate-only --status invalid --li
 ```
 
 **What it does**:
-- Discovers all games for specified seasons
+- Discovers all games for specified seasons or specific dates
 - Populates the `game_url_queue` table in the database
 - Validates URLs for accessibility and content using the improved validator
 - Automatically converts 'invalid' URLs to 'pending' for revalidation when using `--validate-only`
 - Shows comprehensive statistics by season, status, and game type
+- Handles multiple date formats for flexible date input
 
 **Key Features**:
+- **Date-Specific Processing**: Can process games for specific dates to fix missing or failed URL retrievals
+- **Multiple Date Formats**: Supports YYYY-MM-DD, YYYYMMDD, and MM/DD/YYYY date formats
+- **Smart Season Detection**: Automatically determines the correct NBA season for each date
 - **Smart Revalidation**: When using `--validate-only` with no pending URLs, automatically converts invalid URLs to pending for revalidation with the improved validator
 - **Improved Validation**: Uses CSS selector `#__NEXT_DATA__` to properly identify script tags with game data
 - **Flexible Status Filtering**: Can validate URLs with different statuses (pending, invalid, etc.)

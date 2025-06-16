@@ -6,7 +6,7 @@ Main script to discover and populate NBA game URLs for systematic scraping.
 import asyncio
 import logging
 import argparse
-from datetime import datetime
+from datetime import datetime, date
 from typing import List, Optional
 
 from sqlalchemy.orm import Session
@@ -94,6 +94,114 @@ class GameURLQueueBuilder:
             logger.info(f"Validation completed: {validation_stats}")
         
         return total_stats
+    
+    async def build_queue_for_dates(self, dates: List[str], validate: bool = True) -> dict:
+        """Build queue for specific dates."""
+        logger.info(f"Building queue for specific dates: {dates}")
+        
+        total_stats = {
+            'dates_processed': 0,
+            'total_games': 0,
+            'total_inserted': 0,
+            'total_duplicates': 0,
+            'total_errors': 0,
+            'validation_stats': None,
+            'processed_dates': []
+        }
+        
+        # Parse and validate dates
+        parsed_dates = []
+        for date_str in dates:
+            try:
+                # Try different date formats
+                if len(date_str) == 10 and '-' in date_str:
+                    # Format: YYYY-MM-DD
+                    parsed_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+                elif len(date_str) == 8:
+                    # Format: YYYYMMDD
+                    parsed_date = datetime.strptime(date_str, '%Y%m%d').date()
+                elif '/' in date_str:
+                    # Format: MM/DD/YYYY or M/D/YYYY
+                    parsed_date = datetime.strptime(date_str, '%m/%d/%Y').date()
+                else:
+                    raise ValueError(f"Unsupported date format: {date_str}")
+                
+                parsed_dates.append(parsed_date)
+                logger.info(f"Parsed date: {date_str} -> {parsed_date}")
+                
+            except ValueError as e:
+                logger.error(f"Invalid date format '{date_str}': {e}")
+                total_stats['total_errors'] += 1
+                continue
+        
+        if not parsed_dates:
+            logger.error("No valid dates to process")
+            return total_stats
+        
+        # Determine season for each date to use appropriate discovery logic
+        season_dates = {}
+        for parsed_date in parsed_dates:
+            season = self._determine_season_for_date(parsed_date)
+            if season not in season_dates:
+                season_dates[season] = []
+            season_dates[season].append(parsed_date)
+        
+        logger.info(f"Dates grouped by season: {season_dates}")
+        
+        # Process each season's dates
+        for season, season_date_list in season_dates.items():
+            logger.info(f"Processing {len(season_date_list)} dates for season {season}")
+            
+            try:
+                # Discover games for the specific dates
+                games = await self.generator.discover_games_for_dates(season_date_list, season)
+                
+                if games:
+                    # Populate queue
+                    stats = await self.generator.populate_queue(games)
+                    
+                    # Update totals
+                    total_stats['dates_processed'] += len(season_date_list)
+                    total_stats['total_games'] += stats['total']
+                    total_stats['total_inserted'] += stats['inserted']
+                    total_stats['total_duplicates'] += stats['duplicates']
+                    total_stats['total_errors'] += stats['errors']
+                    total_stats['processed_dates'].extend([d.isoformat() for d in season_date_list])
+                    
+                    logger.info(f"Season {season} dates completed: {stats}")
+                else:
+                    logger.warning(f"No games found for season {season} dates: {season_date_list}")
+                
+            except Exception as e:
+                logger.error(f"Error processing season {season} dates: {e}")
+                total_stats['total_errors'] += 1
+        
+        # Validate URLs if requested
+        if validate and total_stats['total_inserted'] > 0:
+            logger.info("Starting URL validation...")
+            validation_stats = await self.validator.validate_queue_urls(
+                status_filter='pending',
+                limit=total_stats['total_inserted']  # Validate all newly inserted
+            )
+            total_stats['validation_stats'] = validation_stats
+            logger.info(f"Validation completed: {validation_stats}")
+        
+        return total_stats
+    
+    def _determine_season_for_date(self, game_date: date) -> str:
+        """Determine NBA season for a given date."""
+        year = game_date.year
+        month = game_date.month
+        
+        # NBA season typically runs October to June
+        # Games from Oct-Dec belong to season starting that year
+        # Games from Jan-Jun belong to season that started the previous year
+        if month >= 10:  # October, November, December
+            season_start_year = year
+        else:  # January through September
+            season_start_year = year - 1
+        
+        return f"{season_start_year}-{str(season_start_year + 1)[2:]}"
     
     async def build_full_queue(self, validate_sample: bool = True) -> dict:
         """Build the complete queue for all seasons 1996-2025."""
@@ -263,6 +371,7 @@ async def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(description='Build NBA Game URL Queue')
     parser.add_argument('--seasons', nargs='+', help='Specific seasons to process (e.g., 2023-24 2024-25)')
+    parser.add_argument('--dates', nargs='+', help='Specific dates to process (e.g., 2024-12-25 2024-12-26). Supports YYYY-MM-DD, YYYYMMDD, or MM/DD/YYYY formats')
     parser.add_argument('--validate', action='store_true', help='Validate URLs after generation')
     parser.add_argument('--validate-only', action='store_true', help='Only validate existing URLs')
     parser.add_argument('--stats-only', action='store_true', help='Only show queue statistics')
@@ -301,6 +410,13 @@ async def main():
             current_stats = builder.get_queue_stats()
             print(f"\n=== CURRENT QUEUE STATUS ===")
             print(f"By Status: {current_stats.get('by_status', {})}")
+            
+        elif args.dates:
+            # Process specific dates
+            stats = await builder.build_queue_for_dates(args.dates, validate=args.validate)
+            print(f"\n=== DATE PROCESSING RESULTS ===")
+            print(f"Processing stats: {stats}")
+            print(f"Processed dates: {stats.get('processed_dates', [])}")
             
         elif args.seasons:
             # Process specific seasons

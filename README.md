@@ -31,6 +31,11 @@ python -m src.scripts.build_game_url_queue
 python -m src.scripts.build_game_url_queue --seasons 2023-24 2024-25
 ```
 
+**Build queue for specific dates (useful for fixing missing dates):**
+```bash
+python -m src.scripts.build_game_url_queue --dates 2024-12-25 2024-12-26 --validate
+```
+
 **Validate existing URLs in the queue (auto-converts invalid to pending):**
 ```bash
 python -m src.scripts.build_game_url_queue --validate-only
@@ -57,12 +62,13 @@ python -m src.scripts.build_game_url_queue --validate
 ```
 
 #### What the Script Does
-1. **Discovers Games**: Systematically identifies all NBA games for specified seasons
+1. **Discovers Games**: Systematically identifies all NBA games for specified seasons or specific dates
 2. **Generates URLs**: Creates URLs in the format `https://www.nba.com/game/{away}-vs-{home}-{gameId}`
 3. **Handles Team Changes**: Manages team relocations (e.g., Seattle→OKC, New Jersey→Brooklyn)
-4. **Populates Database**: Stores game URLs in the `game_url_queue` table with metadata
-5. **Smart Validation**: Validates URL accessibility and content using CSS selector `#__NEXT_DATA__`
-6. **Auto-Revalidation**: When using `--validate-only`, automatically converts invalid URLs to pending for revalidation with the improved validator
+4. **Date Processing**: Can process specific dates to fix missing or failed URL retrievals
+5. **Populates Database**: Stores game URLs in the `game_url_queue` table with metadata
+6. **Smart Validation**: Validates URL accessibility and content using CSS selector `#__NEXT_DATA__`
+7. **Auto-Revalidation**: When using `--validate-only`, automatically converts invalid URLs to pending for revalidation with the improved validator
 
 #### Output
 The script logs progress to both console and `game_url_queue.log` file. Upon completion, it displays:
