@@ -98,6 +98,7 @@ await generator.close()
 
 **Features**:
 - Multiple parsing strategies for different page structures
+- **Accurate game type classification**: Uses NBA game ID patterns (3rd digit: 1=preseason, 2=regular, 3=allstar, 4=playoff)
 - Priority calculation based on season and game type
 - Database integration for queue population
 - Comprehensive error handling

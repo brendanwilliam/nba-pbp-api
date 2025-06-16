@@ -443,25 +443,42 @@ class GameURLGenerator:
         return None
     
     def _determine_game_type(self, game_date: date, season: str, game_id: str) -> str:
-        """Determine if game is regular season, playoff, etc."""
-        # TODO: Fix the logic because of over attribution of allstar games
-        # Basic heuristics - can be improved with more data
+        """Determine if game is regular season, playoff, etc. based on game ID pattern."""
         
-        # Playoff games typically start in April
-        if game_date.month >= 4:
-            # Check if it's after regular season (very rough estimate)
-            if game_date.month >= 5 or (game_date.month == 4 and game_date.day > 15):
+        # Use game ID pattern to determine type (most reliable method)
+        if len(game_id) >= 3:
+            third_digit = game_id[2]
+            
+            if third_digit == '2':
+                return 'regular'
+            elif third_digit == '4':
                 return 'playoff'
+            # Note: Other codes exist (1=preseason, 3=all-star) but are less common
+            elif third_digit == '1':
+                return 'preseason'
+            elif third_digit == '3':
+                return 'allstar'
+        
+        # Fallback to date-based heuristics if game ID pattern doesn't match expected format
+        logger.warning(f"Unknown game ID pattern for {game_id}, falling back to date-based classification")
         
         # All-Star games (mid-February)
         if game_date.month == 2 and 12 <= game_date.day <= 20:
             return 'allstar'
         
         # Preseason (October before regular season starts)
-        season_start = datetime.strptime(self.SEASONS[season][0], "%Y-%m-%d").date()
-        if game_date < season_start:
-            return 'preseason'
+        if season in self.SEASONS:
+            season_start = datetime.strptime(self.SEASONS[season][0], "%Y-%m-%d").date()
+            if game_date < season_start:
+                return 'preseason'
         
+        # Playoff games typically run April-June  
+        if game_date.month in [4, 5, 6]:
+            # Check if it's likely after regular season (mid-April onwards)
+            if game_date.month >= 5 or (game_date.month == 4 and game_date.day > 15):
+                return 'playoff'
+        
+        # Default to regular season
         return 'regular'
     
     def _calculate_priority(self, season: str, game_type: str) -> int:
