@@ -2,74 +2,12 @@
 
 This module contains a comprehensive suite of scraping tools for collecting NBA game data from NBA.com. The scrapers handle URL discovery, validation, data extraction, and queue management with robust error handling and rate limiting.
 
-## Files Overview
+## Architecture Overview
 
 The scrapers work together in this workflow:
-1. **URL Discovery** → **Validation** → **Queue Management** → **Data Extraction** → **Rate Limiting** → **Orchestration**
+1. **URL Discovery** → **Validation** → **Queue Management** → **Data Extraction** → **Rate Limiting**
 
-## Files
-
-### game_data_scraper.py
-
-**Purpose**: Core scraper for extracting play-by-play data from NBA game pages by parsing JSON data from `__NEXT_DATA__` script tags.
-
-**Key Components**:
-- `GameDataScraper` class: Main scraper with configurable delay
-
-**Functions**:
-```python
-scraper = GameDataScraper(delay=2.0)  # 2-second delay between requests
-
-# Extract raw game data from NBA.com page
-game_data = scraper.scrape_game_data(game_url)
-
-# Extract game metadata (teams, scores, etc.)
-metadata = scraper.extract_game_metadata(game_data)
-
-# Extract play-by-play information
-plays = scraper.extract_play_by_play(game_data)
-
-# Validate scraped data structure
-is_valid = scraper.validate_game_data(game_data)
-```
-
-**Dependencies**: `requests`, `BeautifulSoup4`, `json`
-
----
-
-### game_discovery.py
-
-**Purpose**: Discovers NBA games by scraping season schedules from NBA.com (1996-97 to 2024-25) with special handling for lockout seasons and COVID adjustments.
-
-**Key Components**:
-- `GameDiscovery` class: Async game discovery system
-- `GameInfo` dataclass: Stores discovered game information
-
-**Functions**:
-```python
-discovery = GameDiscovery()
-await discovery.initialize()
-
-# Discover games for a specific season
-games = await discovery.discover_season_games("2024-25")
-
-# Discover all games for all seasons
-all_games = await discovery.discover_all_seasons()
-
-# Get season definitions
-seasons = discovery.get_season_definitions()
-
-await discovery.close()
-```
-
-**Features**:
-- HTML parsing with multiple fallback strategies
-- Season definitions with historical adjustments
-- Concurrent processing for efficiency
-
-**Dependencies**: `asyncio`, `aiohttp`, `BeautifulSoup4`
-
----
+## Current Files
 
 ### game_url_generator.py
 
@@ -87,6 +25,9 @@ await generator.initialize()
 # Discover games for a season
 games = await generator.discover_season_games("2024-25", batch_size=10)
 
+# Discover games for specific dates
+games = await generator.discover_games_for_dates(date_list, season)
+
 # Populate database queue
 stats = await generator.populate_queue(games)
 
@@ -102,38 +43,9 @@ await generator.close()
 - Priority calculation based on season and game type
 - Database integration for queue population
 - Comprehensive error handling
+- Date-specific game discovery
 
 **Dependencies**: `asyncio`, `aiohttp`, `sqlalchemy`, `team_mapping`
-
----
-
-### game_url_scraper.py
-
-**Purpose**: Simple synchronous scraper for discovering game URLs from NBA schedule pages with date-based filtering.
-
-**Key Components**:
-- `GameURLScraper` class: Synchronous URL discovery
-
-**Functions**:
-```python
-scraper = GameURLScraper(delay=1.0)
-
-# Get games for a specific date
-games = scraper.get_games_for_date(date(2024, 12, 25))
-
-# Get games for a date range
-all_games = scraper.get_games_for_date_range(start_date, end_date)
-
-# Extract URLs from HTML content
-urls = scraper.extract_game_urls(html_content)
-```
-
-**Features**:
-- Pattern matching for NBA.com game URL format
-- Date-based game discovery
-- Simple rate limiting with delays
-
-**Dependencies**: `requests`, `BeautifulSoup4`
 
 ---
 
@@ -248,78 +160,6 @@ can_proceed = limiter.can_make_request()
 
 ---
 
-### scraping_manager.py
-
-**Purpose**: Main orchestrator for NBA game scraping operations, coordinating URL discovery and data scraping with team management and queue integration.
-
-**Key Components**:
-- `ScrapingManager` class: Coordinates URL discovery and data scraping
-
-**Functions**:
-```python
-manager = ScrapingManager(db_session, url_delay=1.0, data_delay=2.0)
-
-# Discover games for a specific date
-games_added = manager.discover_games_for_date(date(2024, 12, 25), "2024-25")
-
-# Scrape pending games
-scraped = manager.scrape_pending_games(limit=10)
-
-# Get scraping statistics
-stats = manager.get_scraping_stats()
-
-# Team management
-team = manager.get_or_create_team("BOS", "Boston Celtics", "Boston")
-```
-
-**Features**:
-- Team management (get/create operations)
-- Queue management integration
-- Failed game retry logic
-- Progress statistics
-
-**Dependencies**: `sqlalchemy`, `game_url_scraper`, `game_data_scraper`
-
----
-
-### systematic_scraper.py
-
-**Purpose**: Main execution framework with concurrent scraping, monitoring, and error handling for systematic NBA data collection.
-
-**Key Components**:
-- `SystematicScraper` class: Orchestrates mass scraping operations
-
-**Functions**:
-```python
-scraper = SystematicScraper(db_url, rate_limit=1.0)
-await scraper.initialize()
-
-# Populate queue for a season
-await scraper.populate_queue_for_season("2024-25")
-
-# Run continuous scraping
-await scraper.run_continuous_scraping(batch_size=20, max_workers=3)
-
-# Scrape all seasons
-await scraper.scrape_all_seasons(start_season="2020-21")
-
-# Get progress statistics
-stats = await scraper.get_progress_stats()
-
-await scraper.close()
-```
-
-**Features**:
-- Concurrent worker management
-- Built-in rate limiting and backoff
-- Progress monitoring and statistics
-- Automatic retry and error handling
-- Graceful shutdown handling
-
-**Dependencies**: `asyncio`, `aiohttp`, `queue_manager`, `game_discovery`
-
----
-
 ### team_mapping.py
 
 **Purpose**: Comprehensive NBA team abbreviation mapping with historical changes handling team relocations and name changes from 1996-2025.
@@ -398,7 +238,6 @@ await validator.close()
 3. **Queue Management**: `mass_scraping_queue.py` manages the scraping queue
 4. **Data Extraction**: `mass_data_extractor.py` extracts JSON data from valid URLs
 5. **Rate Limiting**: `rate_limiter.py` ensures respectful scraping behavior
-6. **Orchestration**: `systematic_scraper.py` coordinates the entire process
 
 ## Key Features
 

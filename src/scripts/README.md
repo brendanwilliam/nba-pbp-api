@@ -62,25 +62,6 @@ python src/scripts/build_game_url_queue.py --validate-only --status invalid --li
 
 ---
 
-### demo_queue_building.py
-
-**Purpose**: Demo script that populates the queue with sample game data for testing queue management operations without full data processing.
-
-**Usage**:
-```bash
-python src/scripts/demo_queue_building.py
-```
-
-**What it does**:
-- Inserts 4 sample games into the queue (2 from 2024-25, 2 from 2019-20)
-- Shows queue statistics before and after insertion
-- Demonstrates status updates (marking games as validated/invalid)
-- Useful for testing queue functionality without network calls
-
-**Dependencies**: Database module, `GameURLInfo` model
-
----
-
 ### mass_game_scraper.py
 
 **Purpose**: Main orchestration script for mass NBA game scraping with concurrent workers, rate limiting, and comprehensive error handling.
@@ -114,90 +95,6 @@ python src/scripts/mass_game_scraper.py --max-batches 5 --rate-limit 1.0
 - Comprehensive error logging
 
 **Dependencies**: `GameScrapingQueue`, `NBADataExtractor`, `RateLimiter`, database module
-
----
-
-### monitor_progress.py
-
-**Purpose**: Real-time monitoring and reporting dashboard for scraping progress with beautiful terminal UI using Rich library.
-
-**Usage**:
-```bash
-python src/scripts/monitor_progress.py
-```
-
-**Features**:
-- Live updating dashboard with progress bars
-- Season-by-season breakdown with completion percentages
-- Current scraping rate (games per hour)
-- Error summaries and failure analysis
-- Generates detailed text reports for offline analysis
-- Color-coded status indicators
-
-**Dependencies**: `asyncpg`, `rich` library for terminal UI
-
----
-
-### run_december_scraping.py
-
-**Purpose**: Specific script to run scraping for December 2024 games that are already queued in the database (test/demo purposes).
-
-**Usage**:
-```bash
-python src/scripts/run_december_scraping.py
-```
-
-**What it does**:
-- Skips URL collection phase (assumes games already in database)
-- Executes scraping on queued December 2024 games
-- Generates comprehensive summary report
-- Saves detailed report to `december_2024_test_report.md`
-- Provides test metrics and validation results
-
-**Dependencies**: `December2024TestScraper` module
-
----
-
-### run_systematic_scraping.py
-
-**Purpose**: Main entry point for systematic NBA scraping with multiple operation modes and database initialization.
-
-**Command Line Arguments**:
-- First positional argument (command): `populate`, `monitor`, `report`, `reset`, or `scrape`
-- For `populate`: optional season argument
-
-**Usage**:
-```bash
-# Run full systematic scraping (prompts for confirmation)
-python src/scripts/run_systematic_scraping.py
-
-# Populate queue for specific season
-python src/scripts/run_systematic_scraping.py populate 2023-24
-
-# Run monitoring dashboard
-python src/scripts/run_systematic_scraping.py monitor
-
-# Generate comprehensive report
-python src/scripts/run_systematic_scraping.py report
-
-# Reset stale games in queue
-python src/scripts/run_systematic_scraping.py reset
-```
-
-**Environment Variables**:
-- `DATABASE_URL`: PostgreSQL connection string
-- `SCRAPING_RATE_LIMIT`: Requests per second (default: 1.0)
-- `BATCH_SIZE`: Processing batch size (default: 20)
-- `MAX_WORKERS`: Concurrent workers (default: 3)
-- `START_SEASON`: Starting season (default: "1996-97")
-
-**Key Features**:
-- Database schema initialization and validation
-- Multiple operation modes for different tasks
-- Configuration via environment variables
-- Comprehensive logging and error handling
-
-**Dependencies**: `SystematicScraper`, `QueueManager`, `ScrapingMonitor`, database schema
 
 ---
 
@@ -319,13 +216,7 @@ python src/scripts/test_url_queue_build.py
 # 1. Run offline tests first
 python src/scripts/test_queue_offline.py
 
-# 2. Test URL generation with current season
-python src/scripts/test_url_queue_build.py
-
-# 3. Run demo to populate sample data
-python src/scripts/demo_queue_building.py
-
-# 4. Test mass scraper components
+# 2. Test mass scraper components
 python src/scripts/test_mass_scraper.py
 ```
 
@@ -349,9 +240,6 @@ python src/scripts/scraping_monitor.py --export report.json
 
 ### Maintenance Operations:
 ```bash
-# Reset stale games that are stuck in "in_progress" status
-python src/scripts/run_systematic_scraping.py reset
-
 # Validate URLs currently in queue
 python src/scripts/build_game_url_queue.py --validate-only --limit 1000
 
