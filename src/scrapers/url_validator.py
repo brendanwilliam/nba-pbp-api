@@ -153,19 +153,28 @@ class GameURLValidator:
     
     def _check_next_data(self, content: str) -> bool:
         """Check if page contains __NEXT_DATA__ script."""
-        return '__NEXT_DATA__' in content
+        # Check for script tag with id="__NEXT_DATA__"
+        return 'id="__NEXT_DATA__"' in content or "id='__NEXT_DATA__'" in content
     
     def _check_game_data(self, content: str) -> bool:
         """Check if __NEXT_DATA__ contains actual game data."""
         try:
-            # Find __NEXT_DATA__ script
-            script_pattern = re.compile(r'__NEXT_DATA__["\']?\s*=\s*({.*?})\s*(?:</script>|;)', re.DOTALL)
-            match = script_pattern.search(content)
+            # Parse HTML to find the script tag
+            soup = BeautifulSoup(content, 'html.parser')
+            script_tag = soup.find('script', {'id': '__NEXT_DATA__'})
             
-            if not match:
-                return False
+            if not script_tag or not script_tag.string:
+                # Fallback to regex pattern
+                script_pattern = re.compile(r'<script[^>]*id=["\']__NEXT_DATA__["\'][^>]*>([^<]+)</script>', re.DOTALL)
+                match = script_pattern.search(content)
+                if not match:
+                    return False
+                json_str = match.group(1)
+            else:
+                json_str = script_tag.string
             
-            data = json.loads(match.group(1))
+            # Parse the JSON data
+            data = json.loads(json_str)
             
             # Look for common game data indicators
             game_indicators = [

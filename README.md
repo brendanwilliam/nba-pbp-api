@@ -8,6 +8,71 @@ Purpose: Comprehensive NBA play-by-play data API with scraping, storage, and que
 
 This project scrapes NBA play-by-play data from the official NBA website, stores it in PostgreSQL, and provides both REST API and MCP server interfaces for querying the data. The system handles all NBA games from the 1996-97 season through 2024-25.
 
+## Procedure
+
+### Building the Game URL Queue
+
+The `build_game_url_queue.py` script is used to discover and populate NBA game URLs for systematic scraping. This script generates URLs for all NBA games from the 1996-97 season through 2024-25.
+
+#### Prerequisites
+1. Ensure PostgreSQL is running and the database is set up
+2. Activate your virtual environment: `source venv/bin/activate`
+3. Ensure your `.env` file is configured with database credentials
+
+#### Running the Script
+
+**Build complete queue (all seasons 1996-2025):**
+```bash
+python -m src.scripts.build_game_url_queue
+```
+
+**Build queue for specific seasons:**
+```bash
+python -m src.scripts.build_game_url_queue --seasons 2023-24 2024-25
+```
+
+**Validate existing URLs in the queue (auto-converts invalid to pending):**
+```bash
+python -m src.scripts.build_game_url_queue --validate-only
+```
+
+**Validate with a limit:**
+```bash
+python -m src.scripts.build_game_url_queue --validate-only --limit 100
+```
+
+**Revalidate invalid URLs with improved validator:**
+```bash
+python -m src.scripts.build_game_url_queue --validate-only --status invalid --limit 1000
+```
+
+**View queue statistics only:**
+```bash
+python -m src.scripts.build_game_url_queue --stats-only
+```
+
+**Build queue with validation:**
+```bash
+python -m src.scripts.build_game_url_queue --validate
+```
+
+#### What the Script Does
+1. **Discovers Games**: Systematically identifies all NBA games for specified seasons
+2. **Generates URLs**: Creates URLs in the format `https://www.nba.com/game/{away}-vs-{home}-{gameId}`
+3. **Handles Team Changes**: Manages team relocations (e.g., Seattle→OKC, New Jersey→Brooklyn)
+4. **Populates Database**: Stores game URLs in the `game_url_queue` table with metadata
+5. **Smart Validation**: Validates URL accessibility and content using CSS selector `#__NEXT_DATA__`
+6. **Auto-Revalidation**: When using `--validate-only`, automatically converts invalid URLs to pending for revalidation with the improved validator
+
+#### Output
+The script logs progress to both console and `game_url_queue.log` file. Upon completion, it displays:
+- Total games processed
+- Number of URLs inserted
+- Duplicate URLs skipped
+- Any errors encountered
+- Validation statistics (if validation was performed)
+
+
 ## Setup
 
 ### Prerequisites

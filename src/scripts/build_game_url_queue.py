@@ -137,13 +137,56 @@ class GameURLQueueBuilder:
             logger.error(f"Error building full queue: {e}")
             raise
     
-    async def validate_existing_queue(self, limit: Optional[int] = None) -> dict:
+    async def validate_existing_queue(self, limit: Optional[int] = None, status_filter: str = 'pending') -> dict:
         """Validate existing URLs in the queue."""
-        logger.info("Validating existing URLs in queue")
+        logger.info(f"Validating existing URLs in queue with status '{status_filter}'")
         
         try:
+            # Check how many URLs have the requested status
+            from sqlalchemy import text
+            count_result = self.db_session.execute(
+                text("SELECT COUNT(*) FROM game_url_queue WHERE status = :status"),
+                {"status": status_filter}
+            ).scalar()
+            
+            if count_result == 0:
+                logger.info(f"No URLs with status '{status_filter}' found.")
+                
+                # If no pending URLs, check for invalid URLs
+                if status_filter == 'pending':
+                    invalid_count = self.db_session.execute(
+                        text("SELECT COUNT(*) FROM game_url_queue WHERE status = 'invalid'")
+                    ).scalar()
+                    
+                    if invalid_count > 0:
+                        logger.info(f"Found {invalid_count:,} invalid URLs. Converting some to pending for revalidation...")
+                        
+                        # Convert some invalid URLs to pending for revalidation
+                        convert_limit = limit if limit else min(1000, invalid_count)
+                        updated = self.db_session.execute(text("""
+                            UPDATE game_url_queue
+                            SET status = 'pending'
+                            WHERE game_id IN (
+                                SELECT game_id 
+                                FROM game_url_queue 
+                                WHERE status = 'invalid'
+                                ORDER BY season DESC, game_date DESC
+                                LIMIT :limit
+                            )
+                        """), {"limit": convert_limit})
+                        self.db_session.commit()
+                        
+                        converted_count = updated.rowcount
+                        logger.info(f"Converted {converted_count} invalid URLs to pending for revalidation")
+                        
+                        if converted_count == 0:
+                            return {'total': 0, 'valid': 0, 'invalid': 0, 'errors': 0, 'message': 'No URLs to validate'}
+                    else:
+                        return {'total': 0, 'valid': 0, 'invalid': 0, 'errors': 0, 'message': 'No URLs to validate'}
+            
+            # Now validate the URLs
             stats = await self.validator.validate_queue_urls(
-                status_filter='pending',
+                status_filter='pending',  # Always validate pending after conversion
                 limit=limit
             )
             
@@ -224,6 +267,7 @@ async def main():
     parser.add_argument('--validate-only', action='store_true', help='Only validate existing URLs')
     parser.add_argument('--stats-only', action='store_true', help='Only show queue statistics')
     parser.add_argument('--limit', type=int, help='Limit number of URLs to validate')
+    parser.add_argument('--status', default='pending', help='Status of URLs to validate (default: pending, auto-converts invalid to pending)')
     
     args = parser.parse_args()
     
@@ -247,9 +291,16 @@ async def main():
             
         elif args.validate_only:
             # Only validate existing URLs
-            stats = await builder.validate_existing_queue(limit=args.limit)
+            stats = await builder.validate_existing_queue(limit=args.limit, status_filter=args.status)
             print(f"\n=== VALIDATION RESULTS ===")
+            print(f"Status filter: {args.status}")
+            print(f"Limit: {args.limit if args.limit else 'No limit'}")
             print(f"Validation stats: {stats}")
+            
+            # Show current queue status after validation
+            current_stats = builder.get_queue_stats()
+            print(f"\n=== CURRENT QUEUE STATUS ===")
+            print(f"By Status: {current_stats.get('by_status', {})}")
             
         elif args.seasons:
             # Process specific seasons

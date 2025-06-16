@@ -14,6 +14,7 @@ This module contains executable Python scripts for managing NBA game scraping op
 - `--validate-only` (flag): Only validate existing URLs in the queue
 - `--stats-only` (flag): Show queue statistics without building
 - `--limit` (int): Limit number of URLs to validate
+- `--status` (str): Status of URLs to validate (default: pending, auto-converts invalid to pending)
 
 **Usage**:
 ```bash
@@ -26,15 +27,25 @@ python src/scripts/build_game_url_queue.py --seasons 2023-24 2024-25 --validate
 # Just show statistics
 python src/scripts/build_game_url_queue.py --stats-only
 
-# Validate existing URLs (limited batch)
+# Validate existing URLs (limited batch) - auto-converts invalid to pending
 python src/scripts/build_game_url_queue.py --validate-only --limit 100
+
+# Validate specific status of URLs
+python src/scripts/build_game_url_queue.py --validate-only --status invalid --limit 500
 ```
 
 **What it does**:
 - Discovers all games for specified seasons
 - Populates the `game_url_queue` table in the database
-- Validates URLs for accessibility and content
+- Validates URLs for accessibility and content using the improved validator
+- Automatically converts 'invalid' URLs to 'pending' for revalidation when using `--validate-only`
 - Shows comprehensive statistics by season, status, and game type
+
+**Key Features**:
+- **Smart Revalidation**: When using `--validate-only` with no pending URLs, automatically converts invalid URLs to pending for revalidation with the improved validator
+- **Improved Validation**: Uses CSS selector `#__NEXT_DATA__` to properly identify script tags with game data
+- **Flexible Status Filtering**: Can validate URLs with different statuses (pending, invalid, etc.)
+- **Progress Tracking**: Shows validation results and updated queue status
 
 **Dependencies**: `GameURLGenerator`, `GameURLValidator`, database module
 

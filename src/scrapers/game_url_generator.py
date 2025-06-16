@@ -418,6 +418,7 @@ class GameURLGenerator:
     
     def _determine_game_type(self, game_date: date, season: str, game_id: str) -> str:
         """Determine if game is regular season, playoff, etc."""
+        # TODO: Fix the logic because of over attribution of allstar games
         # Basic heuristics - can be improved with more data
         
         # Playoff games typically start in April
