@@ -97,7 +97,7 @@ class GameScrapingQueue:
                     COUNT(*) FILTER (WHERE status = 'failed') as failed,
                     AVG(response_time_ms) as avg_response_time,
                     SUM(data_size_bytes) / 1024.0 / 1024.0 as total_data_mb
-                FROM scraping_queue
+                FROM game_url_queue
                 WHERE updated_at >= (
                     SELECT started_at FROM scraping_sessions 
                     WHERE session_id = $1
@@ -124,10 +124,10 @@ class GameScrapingQueue:
                 # Select and lock games for processing
                 games = await conn.fetch("""
                     SELECT id, game_id, season, game_date, home_team, away_team, 
-                           game_url, retry_count, priority
-                    FROM scraping_queue
-                    WHERE status = 'pending' 
-                    AND retry_count < max_retries
+                           game_url, COALESCE(retry_count, 0) as retry_count, COALESCE(priority, 1) as priority
+                    FROM game_url_queue
+                    WHERE status = 'validated' 
+                    AND COALESCE(retry_count, 0) < COALESCE(max_retries, 3)
                     ORDER BY priority DESC, game_date ASC
                     LIMIT $1
                     FOR UPDATE SKIP LOCKED
@@ -139,7 +139,7 @@ class GameScrapingQueue:
                 # Mark as in progress
                 game_ids = [g['game_id'] for g in games]
                 await conn.execute("""
-                    UPDATE scraping_queue
+                    UPDATE game_url_queue
                     SET status = 'in_progress',
                         started_at = NOW(),
                         updated_at = NOW()
@@ -174,7 +174,7 @@ class GameScrapingQueue:
             async with conn.transaction():
                 # Update queue status
                 await conn.execute("""
-                    UPDATE scraping_queue
+                    UPDATE game_url_queue
                     SET status = 'completed',
                         completed_at = NOW(),
                         updated_at = NOW(),
@@ -214,8 +214,8 @@ class GameScrapingQueue:
             async with conn.transaction():
                 # Get current retry count
                 current = await conn.fetchrow("""
-                    SELECT retry_count, max_retries 
-                    FROM scraping_queue 
+                    SELECT COALESCE(retry_count, 0) as retry_count, COALESCE(max_retries, 3) as max_retries 
+                    FROM game_url_queue 
                     WHERE game_id = $1
                 """, game_id)
                 
@@ -231,12 +231,12 @@ class GameScrapingQueue:
                     final_status = 'failed'
                     started_at = None
                 else:
-                    final_status = 'pending'  # Will be retried
+                    final_status = 'validated'  # Will be retried
                     started_at = None
                 
                 # Update queue record
                 await conn.execute("""
-                    UPDATE scraping_queue
+                    UPDATE game_url_queue
                     SET status = $2,
                         retry_count = $3,
                         error_message = $4,
@@ -266,7 +266,7 @@ class GameScrapingQueue:
         async with self.pool.acquire() as conn:
             async with conn.transaction():
                 await conn.execute("""
-                    UPDATE scraping_queue
+                    UPDATE game_url_queue
                     SET status = 'invalid',
                         error_message = $2,
                         updated_at = NOW(),
@@ -404,19 +404,19 @@ class GameScrapingQueue:
     async def _get_game_url(self, conn, game_id: str) -> str:
         """Get game URL from queue"""
         result = await conn.fetchval("""
-            SELECT game_url FROM scraping_queue WHERE game_id = $1
+            SELECT game_url FROM game_url_queue WHERE game_id = $1
         """, game_id)
         return result or ""
         
     async def _update_season_progress(self, conn, game_id: str, result_type: str):
         """Update season progress tracking"""
         season = await conn.fetchval("""
-            SELECT season FROM scraping_queue WHERE game_id = $1
+            SELECT season FROM game_url_queue WHERE game_id = $1
         """, game_id)
         
         if not season:
             return
             
         # This will be handled by the season_progress_view automatically
-        # since it's calculated from scraping_queue status counts
+        # since it's calculated from game_url_queue status counts
         pass

@@ -191,7 +191,10 @@ class GameURLValidator:
             json_str = json.dumps(data).lower()
             return any(indicator in json_str for indicator in game_indicators)
             
-        except (json.JSONDecodeError, Exception) as e:
+        except json.JSONDecodeError as e:
+            logger.warning(f"JSON decode error checking game data: {e}")
+            return False
+        except Exception as e:
             logger.warning(f"Error checking game data: {e}")
             return False
     

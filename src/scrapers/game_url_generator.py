@@ -15,7 +15,10 @@ from bs4 import BeautifulSoup
 import json
 
 from .team_mapping import NBA_TEAMS
-from ..core.database import get_db
+try:
+    from ..core.database import get_db
+except ImportError:
+    from src.core.database import get_db
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 

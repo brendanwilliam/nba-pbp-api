@@ -124,6 +124,7 @@ The project follows a modular architecture:
 - **src/database/**: Database schema and queue management
   - `queue_schema.sql`: Enhanced scraping queue structure
   - `queue_manager.py`: Queue operations and status tracking
+  - `database_stats.py`: Comprehensive database statistics and monitoring tool
 
 - **src/scripts/**: Execution scripts and utilities
   - `build_game_url_queue.py`: Main script for URL queue generation
@@ -200,6 +201,36 @@ python -m src.scripts.build_game_url_queue --validate-only
 # View queue statistics
 python -m src.scripts.build_game_url_queue --stats-only
 ```
+
+### Database Statistics and Monitoring
+
+Get comprehensive database insights and progress tracking:
+
+```bash
+# View complete database report (recommended)
+python src/database/database_stats.py
+
+# Get full JSON report for detailed analysis
+python src/database/database_stats.py --json
+
+# Get insights for specific table
+python src/database/database_stats.py --table game_url_queue
+```
+
+The database statistics script provides:
+- **Database Overview**: Total size, connections, and health metrics
+- **Table Analysis**: Row counts, storage sizes, and meaningful insights for each table
+- **Progress Tracking**: Scraping completion rates, validation status, and queue metrics
+- **Performance Metrics**: JSON data sizes, response times, and efficiency indicators
+- **Error Analysis**: Failed games, error patterns, and troubleshooting data
+
+#### Key Insights Provided:
+- **`game_url_queue`**: Status distribution, season coverage, completion rates
+- **`raw_game_data`**: JSON storage statistics, scraping timeline, data quality
+- **`scraping_sessions`**: Performance metrics, success rates, session history
+- **`scraping_errors`**: Error patterns, affected games, troubleshooting data
+
+Use this script regularly during mass scraping operations to monitor progress and identify any issues.
 
 ### Run Tests
 ```bash

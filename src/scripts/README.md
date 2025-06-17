@@ -258,3 +258,118 @@ All scripts follow consistent patterns:
 - **Database Integration**: Proper database connection management and cleanup
 
 The scripts are designed to work together as components of the larger NBA play-by-play data scraping and management system, each handling specific aspects of the overall workflow.
+
+---
+
+## Coverage Analysis Scripts
+
+### comprehensive_coverage_report.py
+
+**Purpose**: Comprehensive gap analysis across all NBA game types and eras to identify missing games and coverage issues.
+
+**Usage**:
+```bash
+python src/scripts/comprehensive_coverage_report.py
+```
+
+**What it does**:
+- Analyzes regular season game ID sequences for completeness (1996-2024)
+- Validates early playoff numbering (1996-2000) with sparse sequential IDs
+- Checks modern playoff structure (2001+) using round/series/game format
+- Identifies missing games, extra games, and structural issues
+- Provides prioritized recommendations for gap filling
+
+**Key Features**:
+- Handles different game ID patterns by era
+- Distinguishes between acceptable gaps (early playoffs) and actual missing games
+- Shows critical gaps requiring immediate attention (10+ missing games)
+- Generates actionable reports for data retrieval
+
+---
+
+### verify_game_id_sequences.py
+
+**Purpose**: Verifies regular season game ID sequence coverage by analyzing sequence gaps within each season.
+
+**Usage**:
+```bash
+python src/scripts/verify_game_id_sequences.py
+```
+
+**What it does**:
+- Extracts sequence numbers from regular season game IDs (last 4 digits)
+- Compares actual sequences against expected counts per season
+- Identifies specific missing sequence ranges
+- Shows which games exist vs expected total
+
+**Key Features**:
+- Handles variable season lengths (lockout seasons, COVID season)
+- Identifies exact missing sequences for targeted retrieval
+- Validates sequence continuity and completeness
+
+---
+
+### verify_playoff_sequences.py
+
+**Purpose**: Analyzes playoff game ID structure and validates tournament bracket completeness.
+
+**Usage**:
+```bash
+python src/scripts/verify_playoff_sequences.py
+```
+
+**What it does**:
+- Parses modern playoff IDs: `004{YY}00{round}{series}{game}`
+- Validates tournament structure (8→4→2→1 series progression)
+- Checks for missing series and games within existing series
+- Identifies structural anomalies in playoff data
+
+**Key Features**:
+- Understands NBA playoff tournament structure
+- Detects missing entire series vs missing games within series
+- Generates specific missing game IDs for retrieval
+
+---
+
+### retrieve_identified_gaps.py
+
+**Purpose**: Actively retrieves missing games identified through sequence analysis by discovering team matchups.
+
+**Usage**:
+```bash
+python src/scripts/retrieve_identified_gaps.py
+```
+
+**What it does**:
+- Takes specific missing game sequences from gap analysis
+- Uses team discovery to find valid NBA.com URLs for missing games
+- Estimates game dates based on sequence position in season
+- Adds discovered games to the queue database
+
+**Key Features**:
+- Intelligent team combination discovery (tries common matchups first)
+- Automatic game date estimation based on sequence
+- Rate limiting and error handling for NBA.com requests
+- Progress tracking and success reporting
+
+## Coverage Analysis Workflow
+
+**Complete Coverage Analysis Process**:
+```bash
+# 1. Run comprehensive analysis to identify all gaps
+python src/scripts/comprehensive_coverage_report.py
+
+# 2. Verify specific regular season sequences 
+python src/scripts/verify_game_id_sequences.py
+
+# 3. Check playoff tournament structure
+python src/scripts/verify_playoff_sequences.py
+
+# 4. Retrieve missing games identified in analysis
+python src/scripts/retrieve_identified_gaps.py
+
+# 5. Re-run analysis to verify improvements
+python src/scripts/comprehensive_coverage_report.py
+```
+
+These coverage analysis scripts work together to achieve near-perfect NBA game coverage by systematically identifying and filling gaps in the historical game database.

@@ -184,65 +184,25 @@ class NBADataExtractor:
         # Check basic structure
         has_props = self._check_path(json_data, ['props'], missing_fields)
         has_page_props = self._check_path(json_data, ['props', 'pageProps'], missing_fields)
-        
-        # Check game data
-        has_game = self._check_path(json_data, ['props', 'pageProps', 'game'], missing_fields)
-        has_game_metadata = False
-        if has_game:
-            game_data = json_data['props']['pageProps']['game']
-            has_game_metadata = all(key in game_data for key in ['gameId', 'gameTimeUTC', 'homeTeam', 'awayTeam'])
-            if not has_game_metadata:
-                missing_fields.extend(['game.gameId', 'game.gameTimeUTC', 'game.homeTeam', 'game.awayTeam'])
-        
-        # Check for play-by-play data
-        has_play_by_play = False
-        total_plays = 0
-        
+
         if has_page_props:
-            page_props = json_data['props']['pageProps']
-            
-            # Check various possible locations for play-by-play data
-            pbp_keys = ['playByPlay', 'plays', 'gameActions', 'actions']
-            for key in pbp_keys:
-                if key in page_props and isinstance(page_props[key], list):
-                    has_play_by_play = True
-                    total_plays = len(page_props[key])
-                    break
-                    
-            # Also check nested in game object
-            if not has_play_by_play and has_game:
-                game_data = page_props['game']
-                for key in pbp_keys:
-                    if key in game_data and isinstance(game_data[key], list):
-                        has_play_by_play = True
-                        total_plays = len(game_data[key])
-                        break
-        
-        if not has_play_by_play:
-            missing_fields.append('playByPlay')
-        
-        # Check for box score data
-        has_box_score = False
-        if has_page_props:
-            page_props = json_data['props']['pageProps']
-            box_score_keys = ['boxScore', 'gameStats', 'playerStats', 'teamStats']
-            
-            for key in box_score_keys:
-                if key in page_props:
-                    has_box_score = True
-                    break
-                    
-            # Also check in game object
-            if not has_box_score and has_game:
-                game_data = page_props['game']
-                for key in box_score_keys:
-                    if key in game_data:
-                        has_box_score = True
-                        break
-        
-        if not has_box_score:
-            missing_fields.append('boxScore')
-        
+
+            has_play_by_play = False
+            total_plays = 0
+            if 'playByPlay' in json_data['props']['pageProps']:
+                has_play_by_play = True
+                total_plays = len(json_data['props']['pageProps']['playByPlay']['actions'])
+
+            has_box_score = False
+            if 'game' in json_data['props']['pageProps']:
+                has_box_score = True
+
+            has_game_metadata = False
+            if 'cmsSiteSettings' in json_data['props']:
+                has_game_metadata = True
+
+
+
         # Calculate completeness score
         total_components = 4  # props, game metadata, play-by-play, box score
         present_components = sum([
@@ -251,13 +211,13 @@ class NBADataExtractor:
             has_play_by_play,
             has_box_score
         ])
-        
+
+        if present_components < 4:
+            logger.info(f"has_props: {has_props}, has_page_props: {has_page_props}, has_play_by_play: {has_play_by_play}, has_box_score: {has_box_score}, has_game_metadata: {has_game_metadata}")
+
         completeness_score = present_components / total_components
-        
-        # Bonus for having actual play data
-        if total_plays > 50:  # Reasonable minimum for a full game
-            completeness_score = min(1.0, completeness_score + 0.1)
-        
+
+
         return DataQuality(
             completeness_score=completeness_score,
             has_play_by_play=has_play_by_play,

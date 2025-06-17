@@ -250,51 +250,48 @@ class GameURLQueueBuilder:
         logger.info(f"Validating existing URLs in queue with status '{status_filter}'")
         
         try:
-            # Check how many URLs have the requested status
             from sqlalchemy import text
+            
+            # If status_filter is 'pending', also convert invalid URLs to pending for revalidation
+            if status_filter == 'pending':
+                invalid_count = self.db_session.execute(
+                    text("SELECT COUNT(*) FROM game_url_queue WHERE status = 'invalid'")
+                ).scalar()
+                
+                if invalid_count > 0:
+                    logger.info(f"Found {invalid_count:,} invalid URLs. Converting to pending for revalidation...")
+                    
+                    # Convert invalid URLs to pending for revalidation
+                    # If limit is specified, convert only that many, otherwise convert all
+                    convert_limit = limit if limit else invalid_count
+                    updated = self.db_session.execute(text("""
+                        UPDATE game_url_queue
+                        SET status = 'pending', url_validated = false
+                        WHERE game_id IN (
+                            SELECT game_id 
+                            FROM game_url_queue 
+                            WHERE status = 'invalid'
+                            ORDER BY season DESC, game_date DESC
+                            LIMIT :limit
+                        )
+                    """), {"limit": convert_limit})
+                    self.db_session.commit()
+                    
+                    converted_count = updated.rowcount
+                    logger.info(f"Converted {converted_count} invalid URLs to pending for revalidation")
+            
+            # Check how many URLs have pending status now
             count_result = self.db_session.execute(
-                text("SELECT COUNT(*) FROM game_url_queue WHERE status = :status"),
-                {"status": status_filter}
+                text("SELECT COUNT(*) FROM game_url_queue WHERE status = 'pending'")
             ).scalar()
             
             if count_result == 0:
-                logger.info(f"No URLs with status '{status_filter}' found.")
-                
-                # If no pending URLs, check for invalid URLs
-                if status_filter == 'pending':
-                    invalid_count = self.db_session.execute(
-                        text("SELECT COUNT(*) FROM game_url_queue WHERE status = 'invalid'")
-                    ).scalar()
-                    
-                    if invalid_count > 0:
-                        logger.info(f"Found {invalid_count:,} invalid URLs. Converting some to pending for revalidation...")
-                        
-                        # Convert some invalid URLs to pending for revalidation
-                        convert_limit = limit if limit else min(1000, invalid_count)
-                        updated = self.db_session.execute(text("""
-                            UPDATE game_url_queue
-                            SET status = 'pending'
-                            WHERE game_id IN (
-                                SELECT game_id 
-                                FROM game_url_queue 
-                                WHERE status = 'invalid'
-                                ORDER BY season DESC, game_date DESC
-                                LIMIT :limit
-                            )
-                        """), {"limit": convert_limit})
-                        self.db_session.commit()
-                        
-                        converted_count = updated.rowcount
-                        logger.info(f"Converted {converted_count} invalid URLs to pending for revalidation")
-                        
-                        if converted_count == 0:
-                            return {'total': 0, 'valid': 0, 'invalid': 0, 'errors': 0, 'message': 'No URLs to validate'}
-                    else:
-                        return {'total': 0, 'valid': 0, 'invalid': 0, 'errors': 0, 'message': 'No URLs to validate'}
+                logger.info("No URLs with status 'pending' found after conversion.")
+                return {'total': 0, 'valid': 0, 'invalid': 0, 'errors': 0, 'message': 'No URLs to validate'}
             
-            # Now validate the URLs
+            # Now validate the pending URLs
             stats = await self.validator.validate_queue_urls(
-                status_filter='pending',  # Always validate pending after conversion
+                status_filter='pending',
                 limit=limit
             )
             
