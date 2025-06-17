@@ -373,3 +373,52 @@ python src/scripts/comprehensive_coverage_report.py
 ```
 
 These coverage analysis scripts work together to achieve near-perfect NBA game coverage by systematically identifying and filling gaps in the historical game database.
+
+---
+
+## Database Statistics Module
+
+### database_stats.py
+
+**Purpose**: Comprehensive database statistics and insights tool for monitoring NBA data storage and scraping progress.
+
+**Command Line Usage**:
+```bash
+# Show human-readable summary (default)
+python src/database/database_stats.py
+
+# Export full report as JSON
+python src/database/database_stats.py --json
+
+# Get insights for specific table
+python src/database/database_stats.py --table game_url_queue
+```
+
+**Module Usage**:
+```python
+# Import and use programmatically
+from src.database.database_stats import run_database_stats
+
+# Get summary report
+run_database_stats()
+
+# Get full report as dict
+report = run_database_stats(json_output=True)
+
+# Get specific table insights
+insights = run_database_stats(table_name='raw_game_data')
+```
+
+**What it shows**:
+- Database size and connection info
+- Table sizes, row counts, and key metrics
+- Queue status distribution and completion rates
+- JSON data statistics and storage efficiency
+- Scraping session summaries and error analysis
+- Team data and active status
+
+**Key Features**:
+- Works both as command-line tool and importable module
+- Provides table-specific insights for NBA data structures
+- Real-time progress tracking for scraping operations
+- JSON export for integration with monitoring systems

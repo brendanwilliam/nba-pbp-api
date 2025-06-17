@@ -36,6 +36,7 @@ The project follows a modular architecture with completed and planned components
 - **src/database/**: Database schema and queue management
   - `queue_schema.sql`: Enhanced scraping queue structure with comprehensive indexing
   - `queue_manager.py`: Queue operations, status tracking, and progress monitoring
+  - `database_stats.py`: Comprehensive database statistics and monitoring tool (CLI + module)
 
 - **src/scripts/**: Execution scripts and utilities
   - `build_game_url_queue.py`: Main script for URL queue generation and management
@@ -44,6 +45,7 @@ The project follows a modular architecture with completed and planned components
   - `verify_game_id_sequences.py`: Regular season sequence coverage verification
   - `verify_playoff_sequences.py`: Playoff tournament structure validation
   - `retrieve_identified_gaps.py`: Active retrieval of missing games from gap analysis
+  - `mass_game_scraper.py`: Concurrent mass scraping with worker threads and rate limiting
 
 ### Planned Components 📋
 
