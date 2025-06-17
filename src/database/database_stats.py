@@ -12,9 +12,15 @@ from typing import Dict, List, Any, Optional
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from core.database import get_db
-from sqlalchemy import text
-import json
+try:
+    from core.database import get_db
+    from sqlalchemy import text
+    import json
+except ImportError as e:
+    print(f"Import error: {e}")
+    print("This module requires the NBA PBP API dependencies to be installed.")
+    print("Make sure you're running from the project root with the virtual environment activated.")
+    sys.exit(1)
 
 
 class DatabaseStats:
@@ -469,6 +475,41 @@ class DatabaseStats:
         print("=" * 80)
 
 
+def run_database_stats(json_output=False, table_name=None, summary=True):
+    """
+    Run database stats programmatically (for module usage)
+    
+    Args:
+        json_output (bool): If True, return full report as dict instead of printing
+        table_name (str): If provided, return insights for specific table only
+        summary (bool): If True, print summary report (only used when other options are False)
+    
+    Returns:
+        dict: Database statistics (if json_output=True or table_name provided)
+        None: If printing summary
+    """
+    stats = DatabaseStats()
+    
+    try:
+        if table_name:
+            return stats.get_table_insights(table_name)
+        elif json_output:
+            return stats.generate_full_report()
+        elif summary:
+            stats.print_summary_report()
+            return None
+        else:
+            # Default to summary if no other option specified
+            stats.print_summary_report()
+            return None
+            
+    except Exception as e:
+        print(f"Error generating report: {e}")
+        return {"error": str(e)}
+    finally:
+        stats.close()
+
+
 def main():
     """Main entry point"""
     import argparse
@@ -480,27 +521,23 @@ def main():
     
     args = parser.parse_args()
     
-    stats = DatabaseStats()
-    
     try:
         if args.table:
             # Show specific table insights
-            insights = stats.get_table_insights(args.table)
-            print(json.dumps(insights, indent=2, default=str))
+            result = run_database_stats(table_name=args.table)
+            print(json.dumps(result, indent=2, default=str))
         elif args.json:
             # Full JSON report
-            report = stats.generate_full_report()
-            print(json.dumps(report, indent=2, default=str))
+            result = run_database_stats(json_output=True)
+            print(json.dumps(result, indent=2, default=str))
         else:
             # Human-readable summary
-            stats.print_summary_report()
+            run_database_stats(summary=True)
             
     except KeyboardInterrupt:
         print("\nReport generation interrupted by user")
     except Exception as e:
         print(f"Error generating report: {e}")
-    finally:
-        stats.close()
 
 
 if __name__ == "__main__":
