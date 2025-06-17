@@ -75,11 +75,12 @@ class RawGameData(Base):
     __tablename__ = "raw_game_data"
     
     id = Column(Integer, primary_key=True, index=True)
-    game_id = Column(Integer, ForeignKey("games.id"), nullable=False)
+    game_id = Column(String(20), unique=True, nullable=False, index=True)  # NBA game ID
+    game_url = Column(Text, nullable=False)
     raw_json = Column(JSON, nullable=False)  # Full JSON from __NEXT_DATA__
     scraped_at = Column(DateTime(timezone=True), server_default=func.now())
-    
-    game = relationship("Game", back_populates="raw_data")
+    json_size = Column(Integer)  # Size in bytes
+    processing_status = Column(String(20), default='raw', index=True)  # raw, processed, failed
 
 
 # Add back references

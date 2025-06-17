@@ -28,3 +28,8 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+def get_database_url():
+    """Get database URL for async connections."""
+    return DATABASE_URL

@@ -15,7 +15,10 @@ from bs4 import BeautifulSoup
 import json
 
 from .team_mapping import NBA_TEAMS
-from ..core.database import get_db
+try:
+    from ..core.database import get_db
+except ImportError:
+    from src.core.database import get_db
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
@@ -77,7 +80,7 @@ class GameURLGenerator:
         "2021-22": ("2021-10-19", "2022-06-16"),
         "2022-23": ("2022-10-18", "2023-06-12"),
         "2023-24": ("2023-10-17", "2024-06-17"),
-        "2024-25": ("2024-10-22", "2025-06-15"),
+        "2024-25": ("2024-10-22", "2025-06-15"), # TODO: Update end date once season ends
     }
     
     def __init__(self, db_session: Optional[Session] = None):
@@ -143,6 +146,32 @@ class GameURLGenerator:
             all_games.extend(batch_games)
         
         logger.info(f"Season {season}: discovered {len(all_games)} games")
+        return all_games
+    
+    async def discover_games_for_dates(self, dates: List[date], season: str) -> List[GameURLInfo]:
+        """Discover games for a specific list of dates."""
+        logger.info(f"Discovering games for {len(dates)} specific dates in season {season}")
+        
+        # Sort dates for better logging
+        sorted_dates = sorted(dates)
+        logger.info(f"Date range: {sorted_dates[0]} to {sorted_dates[-1]}")
+        
+        # Use the existing batch processing method
+        all_games = await self._process_date_batch(sorted_dates, season)
+        
+        logger.info(f"Found {len(all_games)} games for the specified dates")
+        
+        # Log games found per date for debugging
+        games_by_date = {}
+        for game in all_games:
+            date_key = game.game_date.isoformat()
+            if date_key not in games_by_date:
+                games_by_date[date_key] = 0
+            games_by_date[date_key] += 1
+        
+        for date_str, count in sorted(games_by_date.items()):
+            logger.info(f"  {date_str}: {count} games")
+        
         return all_games
     
     async def _process_date_batch(self, dates: List[date], season: str) -> List[GameURLInfo]:
@@ -417,24 +446,42 @@ class GameURLGenerator:
         return None
     
     def _determine_game_type(self, game_date: date, season: str, game_id: str) -> str:
-        """Determine if game is regular season, playoff, etc."""
-        # Basic heuristics - can be improved with more data
+        """Determine if game is regular season, playoff, etc. based on game ID pattern."""
         
-        # Playoff games typically start in April
-        if game_date.month >= 4:
-            # Check if it's after regular season (very rough estimate)
-            if game_date.month >= 5 or (game_date.month == 4 and game_date.day > 15):
+        # Use game ID pattern to determine type (most reliable method)
+        if len(game_id) >= 3:
+            third_digit = game_id[2]
+            
+            if third_digit == '2':
+                return 'regular'
+            elif third_digit == '4':
                 return 'playoff'
+            # Note: Other codes exist (1=preseason, 3=all-star) but are less common
+            elif third_digit == '1':
+                return 'preseason'
+            elif third_digit == '3':
+                return 'allstar'
+        
+        # Fallback to date-based heuristics if game ID pattern doesn't match expected format
+        logger.warning(f"Unknown game ID pattern for {game_id}, falling back to date-based classification")
         
         # All-Star games (mid-February)
         if game_date.month == 2 and 12 <= game_date.day <= 20:
             return 'allstar'
         
         # Preseason (October before regular season starts)
-        season_start = datetime.strptime(self.SEASONS[season][0], "%Y-%m-%d").date()
-        if game_date < season_start:
-            return 'preseason'
+        if season in self.SEASONS:
+            season_start = datetime.strptime(self.SEASONS[season][0], "%Y-%m-%d").date()
+            if game_date < season_start:
+                return 'preseason'
         
+        # Playoff games typically run April-June  
+        if game_date.month in [4, 5, 6]:
+            # Check if it's likely after regular season (mid-April onwards)
+            if game_date.month >= 5 or (game_date.month == 4 and game_date.day > 15):
+                return 'playoff'
+        
+        # Default to regular season
         return 'regular'
     
     def _calculate_priority(self, season: str, game_type: str) -> int:

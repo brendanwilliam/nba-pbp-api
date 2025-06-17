@@ -6,6 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is an NBA play-by-play data API project that scrapes game data from the official NBA website, stores it in PostgreSQL, and provides both REST API and MCP server interfaces for querying the data.
 
+## Running Scripts/Code
+Make sure to activate the virtual environment before running any scripts. You can do this by running `source venv/bin/activate` in the root directory of the project.
+
 ## Claude Code Guidelines
 - Before writing code, write your plan to `instructions/` as a markdown file. After writing the plan, write your code to a branch that has the same name as the plan.
 - After writing your code, write a summary of what you did to `instructions/` as a markdown file.
@@ -33,11 +36,16 @@ The project follows a modular architecture with completed and planned components
 - **src/database/**: Database schema and queue management
   - `queue_schema.sql`: Enhanced scraping queue structure with comprehensive indexing
   - `queue_manager.py`: Queue operations, status tracking, and progress monitoring
+  - `database_stats.py`: Comprehensive database statistics and monitoring tool (CLI + module)
 
 - **src/scripts/**: Execution scripts and utilities
   - `build_game_url_queue.py`: Main script for URL queue generation and management
   - `test_queue_offline.py`: Comprehensive testing framework for all components
-  - `demo_queue_building.py`: Working demonstration with sample data
+  - `comprehensive_coverage_report.py`: Gap analysis across all game types and eras
+  - `verify_game_id_sequences.py`: Regular season sequence coverage verification
+  - `verify_playoff_sequences.py`: Playoff tournament structure validation
+  - `retrieve_identified_gaps.py`: Active retrieval of missing games from gap analysis
+  - `mass_game_scraper.py`: Concurrent mass scraping with worker threads and rate limiting
 
 ### Planned Components 📋
 
@@ -81,6 +89,8 @@ Please use this section to keep track of high-level objectives and their status.
 - [x] **Implement team mapping with historical changes (relocations, name changes)**
 - [x] **Create URL validation and accessibility testing framework**
 - [x] **Set up enhanced database schema with proper indexing**
+- [x] **Comprehensive gap analysis and coverage verification system**
+- [x] **Automated missing game retrieval and queue completion**
 
 #### In Progress 🔄
 - [ ] Execute mass game scraping from populated URL queue (Plan 08)

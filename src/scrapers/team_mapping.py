@@ -48,7 +48,7 @@ class NBATeamMapping:
     TEAM_RELOCATIONS = {
         2008: {'SEA': 'OKC'},  # Seattle SuperSonics → Oklahoma City Thunder
         2012: {'NJN': 'BKN'},  # New Jersey Nets → Brooklyn Nets
-        2002: {'CHA': 'NOH'},  # Charlotte Hornets → New Orleans Hornets (original)
+        2002: {'CHH': 'NOH'},  # Charlotte Hornets → New Orleans Hornets (original)
         2013: {'NOH': 'NOP'},  # New Orleans Hornets → New Orleans Pelicans
         2014: {'CHA': 'CHA'},  # Charlotte Bobcats → Charlotte Hornets (reclaimed)
         2001: {'VAN': 'MEM'},  # Vancouver Grizzlies → Memphis Grizzlies
@@ -74,6 +74,7 @@ class NBATeamMapping:
         'NOH': {'name': 'New Orleans Hornets', 'active_until': 2013},
         'VAN': {'name': 'Vancouver Grizzlies', 'active_until': 2001},
         'NOK': {'name': 'New Orleans/Oklahoma City Hornets', 'active_until': 2007},  # Katrina relocation
+        'CHH': {'name': 'Charlotte Hornets', 'active_until': 2002},  # Original Charlotte Hornets
     }
     
     # Special cases and alternative abbreviations

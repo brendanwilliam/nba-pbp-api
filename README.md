@@ -8,6 +8,77 @@ Purpose: Comprehensive NBA play-by-play data API with scraping, storage, and que
 
 This project scrapes NBA play-by-play data from the official NBA website, stores it in PostgreSQL, and provides both REST API and MCP server interfaces for querying the data. The system handles all NBA games from the 1996-97 season through 2024-25.
 
+## Procedure
+
+### Building the Game URL Queue
+
+The `build_game_url_queue.py` script is used to discover and populate NBA game URLs for systematic scraping. This script generates URLs for all NBA games from the 1996-97 season through 2024-25.
+
+#### Prerequisites
+1. Ensure PostgreSQL is running and the database is set up
+2. Activate your virtual environment: `source venv/bin/activate`
+3. Ensure your `.env` file is configured with database credentials
+
+#### Running the Script
+
+**Build complete queue (all seasons 1996-2025):**
+```bash
+python -m src.scripts.build_game_url_queue
+```
+
+**Build queue for specific seasons:**
+```bash
+python -m src.scripts.build_game_url_queue --seasons 2023-24 2024-25
+```
+
+**Build queue for specific dates (useful for fixing missing dates):**
+```bash
+python -m src.scripts.build_game_url_queue --dates 2024-12-25 2024-12-26 --validate
+```
+
+**Validate existing URLs in the queue (auto-converts invalid to pending):**
+```bash
+python -m src.scripts.build_game_url_queue --validate-only
+```
+
+**Validate with a limit:**
+```bash
+python -m src.scripts.build_game_url_queue --validate-only --limit 100
+```
+
+**Revalidate invalid URLs with improved validator:**
+```bash
+python -m src.scripts.build_game_url_queue --validate-only --status invalid --limit 1000
+```
+
+**View queue statistics only:**
+```bash
+python -m src.scripts.build_game_url_queue --stats-only
+```
+
+**Build queue with validation:**
+```bash
+python -m src.scripts.build_game_url_queue --validate
+```
+
+#### What the Script Does
+1. **Discovers Games**: Systematically identifies all NBA games for specified seasons or specific dates
+2. **Generates URLs**: Creates URLs in the format `https://www.nba.com/game/{away}-vs-{home}-{gameId}`
+3. **Handles Team Changes**: Manages team relocations (e.g., Seattle→OKC, New Jersey→Brooklyn)
+4. **Date Processing**: Can process specific dates to fix missing or failed URL retrievals
+5. **Populates Database**: Stores game URLs in the `game_url_queue` table with metadata
+6. **Smart Validation**: Validates URL accessibility and content using CSS selector `#__NEXT_DATA__`
+7. **Auto-Revalidation**: When using `--validate-only`, automatically converts invalid URLs to pending for revalidation with the improved validator
+
+#### Output
+The script logs progress to both console and `game_url_queue.log` file. Upon completion, it displays:
+- Total games processed
+- Number of URLs inserted
+- Duplicate URLs skipped
+- Any errors encountered
+- Validation statistics (if validation was performed)
+
+
 ## Setup
 
 ### Prerequisites
@@ -53,6 +124,7 @@ The project follows a modular architecture:
 - **src/database/**: Database schema and queue management
   - `queue_schema.sql`: Enhanced scraping queue structure
   - `queue_manager.py`: Queue operations and status tracking
+  - `database_stats.py`: Comprehensive database statistics and monitoring tool
 
 - **src/scripts/**: Execution scripts and utilities
   - `build_game_url_queue.py`: Main script for URL queue generation
@@ -129,6 +201,36 @@ python -m src.scripts.build_game_url_queue --validate-only
 # View queue statistics
 python -m src.scripts.build_game_url_queue --stats-only
 ```
+
+### Database Statistics and Monitoring
+
+Get comprehensive database insights and progress tracking:
+
+```bash
+# View complete database report (recommended)
+python src/database/database_stats.py
+
+# Get full JSON report for detailed analysis
+python src/database/database_stats.py --json
+
+# Get insights for specific table
+python src/database/database_stats.py --table game_url_queue
+```
+
+The database statistics script provides:
+- **Database Overview**: Total size, connections, and health metrics
+- **Table Analysis**: Row counts, storage sizes, and meaningful insights for each table
+- **Progress Tracking**: Scraping completion rates, validation status, and queue metrics
+- **Performance Metrics**: JSON data sizes, response times, and efficiency indicators
+- **Error Analysis**: Failed games, error patterns, and troubleshooting data
+
+#### Key Insights Provided:
+- **`game_url_queue`**: Status distribution, season coverage, completion rates
+- **`raw_game_data`**: JSON storage statistics, scraping timeline, data quality
+- **`scraping_sessions`**: Performance metrics, success rates, session history
+- **`scraping_errors`**: Error patterns, affected games, troubleshooting data
+
+Use this script regularly during mass scraping operations to monitor progress and identify any issues.
 
 ### Run Tests
 ```bash
