@@ -4,7 +4,9 @@
 Migrate the NBA play-by-play database from local PostgreSQL to a cloud-hosted solution, ensuring scalability, reliability, and optimal performance for API serving.
 
 ## Background
-With the local database populated with historical NBA data, migrate to a cloud platform to support public API access, ensure high availability, and enable horizontal scaling as usage grows.
+**Current State**: Local PostgreSQL database with 8,765 games (449MB raw data), enhanced schema designed, with ongoing scraping toward ~30,000 total games. Migration to cloud will support public API access, ensure high availability, and enable horizontal scaling as usage grows.
+
+**Dependencies**: Plans 10 (schema implementation) and 11 (ETL migration) completion
 
 ## Scope
 - **Cloud Provider Selection**: AWS, Google Cloud, or Azure evaluation

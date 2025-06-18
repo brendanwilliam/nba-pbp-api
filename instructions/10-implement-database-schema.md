@@ -4,22 +4,28 @@
 Implement the optimized database schema designed from JSON analysis, including table creation, indexes, constraints, and performance optimizations for the NBA play-by-play data.
 
 ## Background
-Based on comprehensive JSON analysis, implement a production-ready PostgreSQL schema that efficiently stores and enables querying of NBA game data, play-by-play events, and statistics.
+Based on comprehensive JSON analysis (Plan 09 ✅), implement a production-ready PostgreSQL schema that efficiently stores and enables querying of NBA game data, play-by-play events, and statistics. The enhanced schema has been designed and needs to be deployed alongside the existing queue infrastructure.
 
 ## Scope
-- **Schema Implementation**: Create all tables, relationships, and constraints
+- **Schema Implementation**: Deploy enhanced schema alongside existing queue tables
 - **Performance Optimization**: Indexes, partitioning, and query optimization
 - **Data Integrity**: Foreign keys, check constraints, and validation rules
 - **Migration Framework**: Alembic migration scripts for version control
+- **Coexistence**: Ensure new schema works with existing raw_game_data table
 
 ## Implementation Plan
 
-### Phase 1: Core Schema Implementation
-1. **Table creation order**
-   - Reference tables first (teams, players)
-   - Core data tables (games, play_events)
-   - Statistics tables (player_game_stats, team_game_stats)
-   - Advanced analytics tables (shot_events)
+### Phase 1: Enhanced Schema Deployment
+**Current State**: 
+- Existing database with 8,765 games in raw_game_data table
+- Queue infrastructure operational (game_url_queue, scraping_queue)
+- Enhanced schema designed in `src/database/enhanced_schema.sql`
+
+1. **Schema deployment strategy**
+   - Deploy enhanced schema alongside existing tables
+   - Maintain existing queue and raw data infrastructure
+   - Create new normalized tables for structured data
+   - Ensure no disruption to ongoing scraping (Plan 08)
 
 2. **Alembic migration structure**
    ```
