@@ -8,77 +8,6 @@ Purpose: Comprehensive NBA play-by-play data API with scraping, storage, and que
 
 This project scrapes NBA play-by-play data from the official NBA website, stores it in PostgreSQL, and provides both REST API and MCP server interfaces for querying the data. The system handles all NBA games from the 1996-97 season through 2024-25.
 
-## Procedure
-
-### Building the Game URL Queue
-
-The `build_game_url_queue.py` script is used to discover and populate NBA game URLs for systematic scraping. This script generates URLs for all NBA games from the 1996-97 season through 2024-25.
-
-#### Prerequisites
-1. Ensure PostgreSQL is running and the database is set up
-2. Activate your virtual environment: `source venv/bin/activate`
-3. Ensure your `.env` file is configured with database credentials
-
-#### Running the Script
-
-**Build complete queue (all seasons 1996-2025):**
-```bash
-python -m src.scripts.build_game_url_queue
-```
-
-**Build queue for specific seasons:**
-```bash
-python -m src.scripts.build_game_url_queue --seasons 2023-24 2024-25
-```
-
-**Build queue for specific dates (useful for fixing missing dates):**
-```bash
-python -m src.scripts.build_game_url_queue --dates 2024-12-25 2024-12-26 --validate
-```
-
-**Validate existing URLs in the queue (auto-converts invalid to pending):**
-```bash
-python -m src.scripts.build_game_url_queue --validate-only
-```
-
-**Validate with a limit:**
-```bash
-python -m src.scripts.build_game_url_queue --validate-only --limit 100
-```
-
-**Revalidate invalid URLs with improved validator:**
-```bash
-python -m src.scripts.build_game_url_queue --validate-only --status invalid --limit 1000
-```
-
-**View queue statistics only:**
-```bash
-python -m src.scripts.build_game_url_queue --stats-only
-```
-
-**Build queue with validation:**
-```bash
-python -m src.scripts.build_game_url_queue --validate
-```
-
-#### What the Script Does
-1. **Discovers Games**: Systematically identifies all NBA games for specified seasons or specific dates
-2. **Generates URLs**: Creates URLs in the format `https://www.nba.com/game/{away}-vs-{home}-{gameId}`
-3. **Handles Team Changes**: Manages team relocations (e.g., Seattle→OKC, New Jersey→Brooklyn)
-4. **Date Processing**: Can process specific dates to fix missing or failed URL retrievals
-5. **Populates Database**: Stores game URLs in the `game_url_queue` table with metadata
-6. **Smart Validation**: Validates URL accessibility and content using CSS selector `#__NEXT_DATA__`
-7. **Auto-Revalidation**: When using `--validate-only`, automatically converts invalid URLs to pending for revalidation with the improved validator
-
-#### Output
-The script logs progress to both console and `game_url_queue.log` file. Upon completion, it displays:
-- Total games processed
-- Number of URLs inserted
-- Duplicate URLs skipped
-- Any errors encountered
-- Validation statistics (if validation was performed)
-
-
 ## Setup
 
 ### Prerequisites
@@ -114,8 +43,9 @@ The project follows a modular architecture:
   - `team_mapping.py`: NBA team abbreviation mapping with historical changes
   - `game_url_generator.py`: URL discovery and generation system
   - `url_validator.py`: URL accessibility and content validation
-  - `game_data_scraper.py`: JSON data extraction from game pages
-  - `scraping_manager.py`: Coordinated scraping operations
+  - `mass_data_extractor.py`: Enhanced JSON extraction with quality scoring and validation
+  - `mass_scraping_queue.py`: Queue management for mass scraping operations
+  - `rate_limiter.py`: Rate limiting and request throttling
 
 - **src/core/**: Core business logic and data models
   - `database.py`: Database connection and session management
@@ -128,8 +58,8 @@ The project follows a modular architecture:
 
 - **src/scripts/**: Execution scripts and utilities
   - `build_game_url_queue.py`: Main script for URL queue generation
+  - `mass_game_scraper.py`: Concurrent mass scraping with worker threads
   - `test_queue_offline.py`: Comprehensive testing framework
-  - `demo_queue_building.py`: Working demonstration
 
 - **src/api/**: RESTful API endpoints (planned)
 - **src/analytics/**: Data analysis and insights (planned)
@@ -140,10 +70,12 @@ The project follows a modular architecture:
 - [x] Create plans for all objectives
 - [x] Start small batch test scraping of NBA.com game pages (December 2024)
 - [x] Create systematic plan to scrape all games from 1996-97 to 2024-25 seasons
-- [x] **Build comprehensive game URL queue system (30,000+ games)**
+- [x] **Build comprehensive game URL queue system (~30,000 games)**
 - [x] **Implement team mapping with historical changes (relocations, name changes)**
-- [x] **Create URL validation and accessibility testing**
+- [x] **Create URL validation and accessibility testing framework**
 - [x] **Set up enhanced database schema with proper indexing**
+- [x] **Comprehensive gap analysis and coverage verification system**
+- [x] **Automated missing game retrieval and queue completion**
 
 ### In Progress 🔄
 - [ ] Execute mass game scraping from populated URL queue
@@ -202,6 +134,33 @@ python -m src.scripts.build_game_url_queue --validate-only
 python -m src.scripts.build_game_url_queue --stats-only
 ```
 
+### Mass Game Scraping
+
+Execute mass scraping of games from the populated URL queue:
+
+```bash
+# Start mass scraping with default settings (4 workers, 0.5 req/sec)
+python -m src.scripts.mass_game_scraper
+
+# Scrape with custom settings
+python -m src.scripts.mass_game_scraper --max-workers 8 --rate-limit 1.0
+
+# Scrape specific season only
+python -m src.scripts.mass_game_scraper --season 2023-24
+
+# Process limited number of batches (useful for testing)
+python -m src.scripts.mass_game_scraper --max-batches 10 --batch-size 50
+```
+
+The mass scraper features:
+- **Concurrent Processing**: Multiple workers for efficient scraping
+- **Rate Limiting**: Respectful scraping with configurable delays
+- **Progress Tracking**: Real-time monitoring and resumable operations
+- **Error Handling**: Automatic retries and comprehensive error logging
+- **Data Extraction**: Uses `mass_data_extractor.py` to extract JSON from `#__NEXT_DATA__`
+- **Quality Assessment**: Validates data completeness and scores extraction quality
+- **Data Storage**: Raw JSON storage in `raw_game_data` table with metadata
+
 ### Database Statistics and Monitoring
 
 Get comprehensive database insights and progress tracking:
@@ -209,6 +168,9 @@ Get comprehensive database insights and progress tracking:
 ```bash
 # View complete database report (recommended)
 python src/database/database_stats.py
+
+# Or run as a module
+python -m src.database.database_stats
 
 # Get full JSON report for detailed analysis
 python src/database/database_stats.py --json
@@ -232,14 +194,6 @@ The database statistics script provides:
 
 Use this script regularly during mass scraping operations to monitor progress and identify any issues.
 
-### Run Tests
-```bash
-# Offline functionality tests
-python -m src.scripts.test_queue_offline
-
-# Demo with sample data
-python -m src.scripts.demo_queue_building
-```
 
 
 ## Database

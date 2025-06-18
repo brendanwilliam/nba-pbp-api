@@ -4,7 +4,9 @@
 Develop a Model Context Protocol (MCP) server that enables Large Language Models to query NBA play-by-play data using natural language, providing seamless integration for AI applications and chatbots.
 
 ## Background
-The MCP server will translate natural language queries into structured database queries, allowing LLMs like Claude, GPT, and others to access NBA data through conversational interfaces.
+**Current State**: Enhanced database schema designed with comprehensive NBA data structure. The MCP server will translate natural language queries into structured database queries, allowing LLMs like Claude, GPT, and others to access NBA data through conversational interfaces.
+
+**Dependencies**: Plans 10 (schema), 11 (ETL), 12 (cloud), and 13 (REST API) completion
 
 ## Scope
 - **MCP Implementation**: Standards-compliant MCP server
