@@ -1,12 +1,74 @@
 # NBA Play-by-Play Data API
 
-Date: 2025-06-14  
+Date: 2025-06-20
 Author: Brendan Keane  
 Purpose: Comprehensive NBA play-by-play data API with scraping, storage, and query capabilities.
 
 ## Project Overview
 
 This project scrapes NBA play-by-play data from the official NBA website, stores it in PostgreSQL, and provides both REST API and MCP server interfaces for querying the data. The system handles all NBA games from the 1996-97 season through 2024-25.
+
+## Current Status & Commands
+As of June 20th, 2025, we are scraping NBA play-by-play data from the official NBA website and storing the raw JSON data in the `raw_game_data` table. We have also created a game URL queue system that contains all games from the 1996-97 season through 2024-25. We are periodically populating the other database tables with the parsed data from the raw JSON data. Here are the commands to run:
+
+```bash
+# Build game URL queue
+python -m src.scripts.build_game_url_queue
+
+# Mass scrape games from URL queue (10 workers, 1.0 req/sec, 100 games per batch, 10 batches)
+python -m src.scripts.mass_game_scraper --max-workers 10 --rate-limit 1.0 --batch-size 100 --max-batches 10
+
+# Populate enhanced schema from raw game data (all games)
+python -m src.scripts.populate_enhanced_schema
+
+# View database statistics (recommended for monitoring progress)
+python -m src.database.database_stats
+```
+
+### Status Report (2025-06-20)
+```
+================================================================================
+NBA PLAY-BY-PLAY DATABASE REPORT
+================================================================================
+
+DATABASE OVERVIEW
+   Database: nba_pbp
+   Total Size: 3868 MB
+   Active Connections: 1
+
+TABLES SUMMARY (19 tables)
+--------------------------------------------------------------------------------
+Table Name           Size         Rows            Key Insights
+--------------------------------------------------------------------------------
+play_events          2566 MB      10,318,265      
+raw_game_data        1106 MB      21,771          21771 games, 320.80 KB avg
+player_game_stats    147 MB       614,715         
+game_url_queue       20 MB        36,685          59.26% scraped
+team_game_stats      13 MB        43,372          
+enhanced_games       5560 kB      21,687          
+players              656 kB       3,543           
+scraping_queue       168 kB       32              
+scrape_queue         96 kB        30              
+games                96 kB        30              
+teams                88 kB        30              
+arenas               64 kB        88              
+scraping_sessions    48 kB        51              51 sessions
+scraping_errors      32 kB        0               
+alembic_version      24 kB        1               
+game_periods         16 kB        0               
+game_officials       8192 bytes   0               
+officials            8192 bytes   0               
+season_progress      8192 bytes   0               
+
+KEY METRICS
+   Total Games in Queue: 36,685
+   Games Completed: 21,740
+   Completion Rate: 59.26%
+   Games Ready to Scrape: 14,628
+   JSON Data Stored: 6820.5 MB
+   Average Game Size: 320.80 KB
+================================================================================
+```
 
 ## Setup
 
@@ -76,14 +138,14 @@ The project follows a modular architecture:
 - [x] **Set up enhanced database schema with proper indexing**
 - [x] **Comprehensive gap analysis and coverage verification system**
 - [x] **Automated missing game retrieval and queue completion**
+- [x] **Analyze JSON data and design comprehensive database schema (Plan 09)**
+- [x] **Implement complete database schema for parsed data (Plan 10)**
 
 ### In Progress 🔄
-- [ ] Execute mass game scraping from populated URL queue
-- [ ] Analyze JSON data and design comprehensive database schema
-- [ ] Implement complete database schema for parsed data
+- [ ] Execute mass game scraping from populated URL queue (Plan 08)
+- [ ] Use JSON data to populate normalized database tables (Plan 11)
 
 ### Planned 📋
-- [ ] Use JSON data to populate normalized database tables
 - [ ] Migrate database to cloud infrastructure
 - [ ] Create REST API endpoints for querying data
 - [ ] Create MCP server for LLM integration
@@ -107,12 +169,12 @@ The scraping system operates in multiple phases:
 - **Progress Tracking**: Real-time monitoring and error handling
 - **Data Storage**: Raw JSON preservation in `raw_game_data` table
 
-### 3. Data Analysis & Schema Design (Phase 3)
+### 3. Data Analysis & Schema Design (Phase 3 - Completed ✅)
 - **JSON Analysis**: Examine structure across different seasons
 - **Schema Design**: Create normalized tables for play-by-play, box scores, metadata
 - **Data Validation**: Ensure completeness and accuracy
 
-### 4. Database Population (Phase 4)
+### 4. Database Population (Phase 4 - In Progress 🔄)
 - **Data Parsing**: Extract structured data from raw JSON
 - **Table Population**: Populate normalized database tables
 - **Index Creation**: Optimize for query performance
@@ -160,6 +222,43 @@ The mass scraper features:
 - **Data Extraction**: Uses `mass_data_extractor.py` to extract JSON from `#__NEXT_DATA__`
 - **Quality Assessment**: Validates data completeness and scores extraction quality
 - **Data Storage**: Raw JSON storage in `raw_game_data` table with metadata
+
+### Enhanced Schema Population
+
+After scraping games into the `raw_game_data` table, populate the enhanced normalized schema:
+
+```bash
+# Populate all unprocessed games from raw_game_data to enhanced schema
+python -m src.scripts.populate_enhanced_schema
+
+# Process specific game by ID
+python -m src.scripts.populate_enhanced_schema --game-id 0022200650
+
+# Process limited number of games (useful for testing)
+python -m src.scripts.populate_enhanced_schema --limit 100
+
+# Dry run to see what would be processed without making changes
+python -m src.scripts.populate_enhanced_schema --dry-run --limit 10
+```
+
+The enhanced schema population features:
+- **Data Extraction**: Parses JSON from `raw_game_data.raw_json` into normalized tables
+- **Smart Filtering**: Automatically skips invalid games (schedule pages, incomplete data)
+- **Idempotent**: Can safely rerun without creating duplicates
+- **Comprehensive Data**: Populates `enhanced_games`, `play_events`, `player_game_stats`, `team_game_stats`, `arenas`
+- **Player Management**: Automatically creates missing players from game data
+- **NBA Team ID Support**: Handles official NBA.com team IDs (1610612xxx format)
+- **Error Handling**: Individual game failures don't stop the entire process
+- **Progress Tracking**: Real-time status updates and summary statistics
+
+#### Enhanced Schema Tables:
+- **`enhanced_games`**: Core game information (teams, scores, dates, arenas)
+- **`play_events`**: Complete play-by-play events with detailed metadata
+- **`player_game_stats`**: Individual player statistics per game
+- **`team_game_stats`**: Team-level statistics per game
+- **`arenas`**: Venue information with capacity and location data
+- **`officials`**: Game officials and referee assignments
+- **`game_periods`**: Period-by-period scoring breakdown
 
 ### Database Statistics and Monitoring
 
