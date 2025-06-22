@@ -9,7 +9,7 @@ the enhanced schema tables with structured data.
 import sys
 import json
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime, timezone
 import argparse
 
@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 try:
     from core.database import get_db
+    from analytics.lineup_tracker_v2 import LineupTrackerV2
     from sqlalchemy import text, select, and_
     from sqlalchemy.orm import Session
     from sqlalchemy.exc import IntegrityError
@@ -289,7 +290,7 @@ class EnhancedSchemaPopulator:
         }
     
     def extract_play_events(self, raw_json: Dict[str, Any], game_id: str) -> List[Dict[str, Any]]:
-        """Extract play-by-play events"""
+        """Extract play-by-play events with enhanced data processing"""
         props = raw_json.get('props', {})
         page_props = props.get('pageProps', {})
         
@@ -303,43 +304,111 @@ class EnhancedSchemaPopulator:
             actions = game.get('actions', [])
         
         events = []
+        
         for action in actions:
             # Convert score strings to integers
             home_score = action.get('scoreHome')
             away_score = action.get('scoreAway')
             try:
-                home_score = int(home_score) if home_score is not None else None
+                home_score = int(home_score) if home_score and home_score != '' else None
             except (ValueError, TypeError):
                 home_score = None
             try:
-                away_score = int(away_score) if away_score is not None else None
+                away_score = int(away_score) if away_score and away_score != '' else None
             except (ValueError, TypeError):
                 away_score = None
+            
+            # Calculate score margin
+            score_margin = None
+            if home_score is not None and away_score is not None:
+                score_margin = home_score - away_score
+            
+            # Extract shot coordinates from xLegacy/yLegacy
+            shot_x = action.get('xLegacy')
+            shot_y = action.get('yLegacy')
+            
+            # Determine shot type from shotValue (2 or 3 points)
+            shot_type = None
+            shot_value = action.get('shotValue')
+            if shot_value == 2:
+                shot_type = '2PT'
+            elif shot_value == 3:
+                shot_type = '3PT'
+            
+            # Calculate time elapsed seconds from clock
+            time_elapsed_seconds = None
+            clock = action.get('clock')
+            period = action.get('period', 1)
+            if clock and isinstance(clock, str):
+                time_elapsed_seconds = self._convert_clock_to_elapsed_seconds(clock, period)
+            
+            # Get event sub type from subType field
+            event_sub_type = action.get('subType')
+            
+            # Determine possession change events
+            possession_change = self._is_possession_change_event(action)
+            
+            # Special handling for rebounds - check if it's a defensive rebound
+            if action.get('actionType', '').lower() == 'rebound':
+                # Look back for the most recent shot attempt (could be separated by blocks)
+                last_shot_team = None
+                
+                # Find current action index in the actions array
+                current_idx = None
+                for idx, a in enumerate(actions):
+                    if a.get('actionNumber') == action.get('actionNumber'):
+                        current_idx = idx
+                        break
+                
+                if current_idx is not None:
+                    # Search backwards through recent actions (up to 5 events)
+                    for j in range(current_idx-1, max(0, current_idx-6), -1):
+                        prev_action = actions[j]
+                        prev_type = prev_action.get('actionType', '').lower()
+                        
+                        # Check for missed shots or missed free throws
+                        if prev_type == 'missed shot':
+                            last_shot_team = prev_action.get('teamTricode')
+                            break
+                        elif prev_type == 'free throw':
+                            if 'miss' in prev_action.get('description', '').lower():
+                                last_shot_team = prev_action.get('teamTricode')
+                                break
+                
+                # If we found a recent shot and teams are different, it's a defensive rebound
+                if last_shot_team and action.get('teamTricode') and action.get('teamTricode') != last_shot_team:
+                    possession_change = True
             
             events.append({
                 'game_id': game_id,
                 'period': action.get('period'),
                 'time_remaining': action.get('clock'),
-                'time_elapsed_seconds': action.get('timeActual'),
+                'time_elapsed_seconds': time_elapsed_seconds,
                 'event_type': action.get('actionType'),
                 'event_action_type': action.get('subType'),
-                'event_sub_type': action.get('qualifier'),
+                'event_sub_type': event_sub_type,
                 'description': action.get('description'),
                 'home_score': home_score,
                 'away_score': away_score,
-                'score_margin': action.get('scoreDifference'),
+                'score_margin': score_margin,
                 'player_id': action.get('personId'),
                 'team_id': action.get('teamId'),
                 'shot_distance': action.get('shotDistance'),
                 'shot_made': action.get('shotResult') == 'Made' if action.get('shotResult') else None,
-                'shot_type': action.get('shotActionType'),
+                'shot_type': shot_type,
                 'shot_zone': action.get('shotZone'),
-                'shot_x': action.get('x'),
-                'shot_y': action.get('y'),
+                'shot_x': shot_x,
+                'shot_y': shot_y,
                 'assist_player_id': action.get('assistPersonId'),
                 'event_order': action.get('actionNumber'),
-                'video_available': action.get('isVideoAvailable', False)
+                'possession_change': possession_change,
+                'video_available': action.get('isVideoAvailable', False),
+                # Store team tricode for later processing if needed
+                '_team_tricode': action.get('teamTricode')
             })
+        
+        # Apply score backfill logic
+        events = self._backfill_scores(events)
         
         return events
     
@@ -608,13 +677,13 @@ class EnhancedSchemaPopulator:
                         event_type, event_action_type, event_sub_type, description,
                         home_score, away_score, score_margin, player_id, team_id,
                         shot_distance, shot_made, shot_type, shot_zone, shot_x, shot_y,
-                        assist_player_id, event_order, video_available
+                        assist_player_id, event_order, possession_change, video_available
                     ) VALUES (
                         :game_id, :period, :time_remaining, :time_elapsed_seconds,
                         :event_type, :event_action_type, :event_sub_type, :description,
                         :home_score, :away_score, :score_margin, :player_id, :team_id,
                         :shot_distance, :shot_made, :shot_type, :shot_zone, :shot_x, :shot_y,
-                        :assist_player_id, :event_order, :video_available
+                        :assist_player_id, :event_order, :possession_change, :video_available
                     )
                 """), event)
                 self.stats['play_events_created'] += 1
@@ -662,13 +731,13 @@ class EnhancedSchemaPopulator:
                         event_type, event_action_type, event_sub_type, description,
                         home_score, away_score, score_margin, player_id, team_id,
                         shot_distance, shot_made, shot_type, shot_zone, shot_x, shot_y,
-                        assist_player_id, event_order, video_available
+                        assist_player_id, event_order, possession_change, video_available
                     ) VALUES (
                         :game_id, :period, :time_remaining, :time_elapsed_seconds,
                         :event_type, :event_action_type, :event_sub_type, :description,
                         :home_score, :away_score, :score_margin, :player_id, :team_id,
                         :shot_distance, :shot_made, :shot_type, :shot_zone, :shot_x, :shot_y,
-                        :assist_player_id, :event_order, :video_available
+                        :assist_player_id, :event_order, :possession_change, :video_available
                     )
                 """), event)
                 self.db.commit()  # Commit each event individually
@@ -837,6 +906,265 @@ class EnhancedSchemaPopulator:
         
         return inserted_count
     
+    def _convert_clock_to_elapsed_seconds(self, clock: str, period: int) -> Optional[int]:
+        """Convert NBA clock format (PT12M34.56S) to elapsed seconds from game start"""
+        try:
+            # Remove PT prefix and parse
+            if clock.startswith('PT'):
+                clock = clock[2:]
+            
+            # Extract minutes and seconds
+            if 'M' in clock and 'S' in clock:
+                parts = clock.replace('S', '').split('M')
+                minutes_remaining = int(parts[0])
+                seconds_remaining = float(parts[1])
+                
+                # Convert to total seconds remaining in period
+                total_remaining = minutes_remaining * 60 + seconds_remaining
+                
+                # Calculate elapsed seconds from game start
+                # Each period is 12 minutes (720 seconds) for regular periods
+                period_length = 720  # 12 minutes in seconds
+                overtime_length = 300  # 5 minutes in seconds for OT
+                
+                elapsed_in_game = 0
+                
+                # Add completed periods
+                for p in range(1, period):
+                    if p <= 4:
+                        elapsed_in_game += period_length
+                    else:
+                        elapsed_in_game += overtime_length
+                
+                # Add elapsed time in current period
+                if period <= 4:
+                    elapsed_in_period = period_length - total_remaining
+                else:
+                    elapsed_in_period = overtime_length - total_remaining
+                
+                elapsed_in_game += elapsed_in_period
+                
+                return int(elapsed_in_game)
+            
+        except (ValueError, IndexError, TypeError):
+            pass
+        
+        return None
+    
+    def _is_possession_change_event(self, action: Dict[str, Any]) -> bool:
+        """Determine if an event represents a change of possession"""
+        action_type = action.get('actionType', '').lower()
+        
+        # Made field goals change possession
+        if action_type == 'made shot':
+            return True
+        
+        # Turnovers change possession (includes steals and fouls that cause turnovers)
+        if action_type == 'turnover':
+            return True
+        
+        # Defensive rebounds change possession
+        # Note: We'll need to check if previous action was a missed shot and team changed
+        # This requires access to the previous action, which we'll handle in extract_play_events
+        if action_type == 'rebound':
+            # For now, just return False - we'll handle DREB detection in extract_play_events
+            return False
+        
+        return False
+    
+    def _backfill_scores(self, events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Backfill missing scores for events that don't have score changes"""
+        if not events:
+            return events
+        
+        # Sort events by period and then by event order to ensure chronological processing
+        sorted_events = sorted(events, key=lambda x: (x.get('period', 0), x.get('event_order', 0)))
+        
+        current_home_score = 0
+        current_away_score = 0
+        
+        for event in sorted_events:
+            # If event has scores, update our running totals
+            if event.get('home_score') is not None and event.get('away_score') is not None:
+                current_home_score = event['home_score']
+                current_away_score = event['away_score']
+                
+                # Ensure score_margin is calculated
+                if event.get('score_margin') is None:
+                    event['score_margin'] = current_home_score - current_away_score
+            else:
+                # Backfill missing scores with current running totals
+                event['home_score'] = current_home_score
+                event['away_score'] = current_away_score
+                event['score_margin'] = current_home_score - current_away_score
+        
+        return sorted_events
+    
+    def insert_lineup_states(self, lineup_states: List[Dict[str, Any]]) -> int:
+        """Insert lineup states into the database"""
+        inserted_count = 0
+        error_count = 0
+        
+        for state in lineup_states:
+            try:
+                # Create lineup hash for uniqueness
+                home_players = sorted(state['home_players'])
+                away_players = sorted(state['away_players']) 
+                lineup_hash = f"{state['game_id']}_{state['period']}_{state['seconds_elapsed']}"
+                
+                # Insert home team lineup
+                if len(home_players) >= 5:
+                    self.db.execute(text("""
+                        INSERT INTO lineup_states (
+                            game_id, period, clock_time, seconds_elapsed, team_id,
+                            player_1_id, player_2_id, player_3_id, player_4_id, player_5_id,
+                            lineup_hash
+                        ) VALUES (
+                            :game_id, :period, :clock_time, :seconds_elapsed, :team_id,
+                            :player_1_id, :player_2_id, :player_3_id, :player_4_id, :player_5_id,
+                            :lineup_hash
+                        )
+                    """), {
+                        'game_id': state['game_id'],
+                        'period': state['period'],
+                        'clock_time': state['clock'],
+                        'seconds_elapsed': state['seconds_elapsed'],
+                        'team_id': state['home_team_id'],
+                        'player_1_id': home_players[0],
+                        'player_2_id': home_players[1],
+                        'player_3_id': home_players[2],
+                        'player_4_id': home_players[3],
+                        'player_5_id': home_players[4],
+                        'lineup_hash': f"{lineup_hash}_home"
+                    })
+                    
+                # Insert away team lineup
+                if len(away_players) >= 5:
+                    self.db.execute(text("""
+                        INSERT INTO lineup_states (
+                            game_id, period, clock_time, seconds_elapsed, team_id,
+                            player_1_id, player_2_id, player_3_id, player_4_id, player_5_id,
+                            lineup_hash
+                        ) VALUES (
+                            :game_id, :period, :clock_time, :seconds_elapsed, :team_id,
+                            :player_1_id, :player_2_id, :player_3_id, :player_4_id, :player_5_id,
+                            :lineup_hash
+                        )
+                    """), {
+                        'game_id': state['game_id'],
+                        'period': state['period'],
+                        'clock_time': state['clock'],
+                        'seconds_elapsed': state['seconds_elapsed'],
+                        'team_id': state['away_team_id'],
+                        'player_1_id': away_players[0],
+                        'player_2_id': away_players[1],
+                        'player_3_id': away_players[2],
+                        'player_4_id': away_players[3],
+                        'player_5_id': away_players[4],
+                        'lineup_hash': f"{lineup_hash}_away"
+                    })
+                
+                inserted_count += 2  # Count both home and away lineups
+                self.stats['lineup_states_created'] = self.stats.get('lineup_states_created', 0) + 2
+            except Exception as e:
+                error_count += 1
+                if error_count <= 3:
+                    print(f"    ⚠️ Lineup state error: {str(e)[:100]}...")
+                continue
+        
+        if error_count > 0:
+            print(f"    Total lineup state errors: {error_count}")
+        
+        return inserted_count
+    
+    def insert_substitution_events(self, substitution_events: List[Dict[str, Any]]) -> int:
+        """Insert substitution events into the database"""
+        inserted_count = 0
+        error_count = 0
+        
+        for event in substitution_events:
+            try:
+                self.db.execute(text("""
+                    INSERT INTO substitution_events (
+                        game_id, action_number, period, clock_time, seconds_elapsed,
+                        team_id, player_out_id, player_out_name, player_in_id, player_in_name, description
+                    ) VALUES (
+                        :game_id, :action_number, :period, :clock_time, :seconds_elapsed,
+                        :team_id, :player_out_id, :player_out_name, :player_in_id, :player_in_name, :description
+                    )
+                """), {
+                    'game_id': event['game_id'],
+                    'action_number': event['event_id'],
+                    'period': event['period'],
+                    'clock_time': event['clock'],
+                    'seconds_elapsed': event['seconds_elapsed'],
+                    'team_id': event['team_id'],
+                    'player_out_id': event['player_out_id'],
+                    'player_out_name': event.get('player_out_name', ''),
+                    'player_in_id': event['player_in_id'],
+                    'player_in_name': event.get('player_in_name', ''),
+                    'description': event['event_description']
+                })
+                inserted_count += 1
+                self.stats['substitution_events_created'] = self.stats.get('substitution_events_created', 0) + 1
+            except Exception as e:
+                error_count += 1
+                if error_count <= 3:
+                    print(f"    ⚠️ Substitution event error: {str(e)[:100]}...")
+                continue
+        
+        if error_count > 0:
+            print(f"    Total substitution event errors: {error_count}")
+        
+        return inserted_count
+    
+    def extract_lineup_tracking_data(self, raw_json: Dict[str, Any], game_id: str) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        """Extract lineup states and substitution events using LineupTrackerV2"""
+        try:
+            # Initialize the lineup tracker with the game data
+            tracker = LineupTrackerV2(raw_json)
+            
+            # Build the lineup timeline
+            timeline = tracker.build_lineup_timeline()
+            
+            # Convert LineupState objects to dictionaries for database insertion
+            lineup_states = []
+            for state in timeline:
+                lineup_states.append({
+                    'game_id': state.game_id,
+                    'period': state.period,
+                    'clock': state.clock,
+                    'seconds_elapsed': state.seconds_elapsed,
+                    'home_team_id': state.home_team_id,
+                    'away_team_id': state.away_team_id,
+                    'home_players': state.home_players,
+                    'away_players': state.away_players
+                })
+            
+            # Extract substitution events from the tracker
+            substitutions = tracker.parse_substitution_events()
+            substitution_events = []
+            for sub in substitutions:
+                substitution_events.append({
+                    'game_id': game_id,
+                    'event_id': sub.action_number,
+                    'period': sub.period,
+                    'clock': sub.clock,
+                    'seconds_elapsed': sub.seconds_elapsed,
+                    'team_id': sub.team_id,
+                    'player_in_id': sub.player_in_id,
+                    'player_out_id': sub.player_out_id,
+                    'player_in_name': sub.player_in_name,
+                    'player_out_name': sub.player_out_name,
+                    'event_description': sub.description
+                })
+            
+            return lineup_states, substitution_events
+        
+        except Exception as e:
+            print(f"    ⚠️ Failed to extract lineup tracking data: {str(e)[:150]}...")
+            return [], []
+    
     def process_game(self, game_id: str, raw_json: Dict[str, Any]) -> bool:
         """Process a single game"""
         success = True
@@ -978,6 +1306,35 @@ class EnhancedSchemaPopulator:
                         pass
                 success = False
             
+            # 6. Insert lineup tracking data
+            try:
+                print(f"  Extracting lineup tracking data...")
+                lineup_states, substitution_events = self.extract_lineup_tracking_data(raw_json, game_id)
+                
+                if lineup_states or substitution_events:
+                    print(f"  Inserting lineup states...")
+                    lineup_states_inserted = self.insert_lineup_states(lineup_states)
+                    if not self.dry_run:
+                        self.db.commit()
+                    
+                    print(f"  Inserting substitution events...")
+                    substitution_events_inserted = self.insert_substitution_events(substitution_events)
+                    if not self.dry_run:
+                        self.db.commit()
+                    
+                    print(f"  ✅ Lineup tracking: {lineup_states_inserted} states, {substitution_events_inserted} events inserted")
+                else:
+                    print(f"  ⏭️ No lineup tracking data extracted")
+            except Exception as e:
+                print(f"  ❌ Lineup tracking failed: {e}")
+                if not self.dry_run:
+                    try:
+                        self.db.rollback()
+                    except:
+                        pass
+                # Don't fail the whole process for lineup tracking issues
+                print(f"  ⚠️ Continuing without lineup tracking data")
+            
             if success:
                 print(f"  ✅ Game {game_id} processed successfully")
                 self.stats['games_processed'] += 1
@@ -1029,6 +1386,175 @@ class EnhancedSchemaPopulator:
         print(f"  Play events created: {self.stats['play_events_created']}")
         print(f"  Team stats created: {self.stats['team_stats_created']}")
         print(f"  Player stats created: {self.stats['player_stats_created']}")
+        print(f"  Lineup states created: {self.stats.get('lineup_states_created', 0)}")
+        print(f"  Substitution events created: {self.stats.get('substitution_events_created', 0)}")
+
+
+def backfill_analytics_data(dry_run: bool = False, limit: Optional[int] = None):
+    """Backfill all analytics-derived data by clearing and repopulating"""
+    print("🔄 Analytics Data Backfill" + (" (DRY RUN)" if dry_run else ""))
+    if limit:
+        print(f"   Limited to {limit:,} games")
+    print("=" * 60)
+    
+    db = next(get_db())
+    
+    try:
+        # Get count of existing analytics data
+        lineup_states_count = db.execute(text("SELECT COUNT(*) FROM lineup_states")).scalar()
+        substitution_events_count = db.execute(text("SELECT COUNT(*) FROM substitution_events")).scalar()
+        
+        print(f"Found existing analytics data:")
+        print(f"  Lineup states: {lineup_states_count:,}")
+        print(f"  Substitution events: {substitution_events_count:,}")
+        print()
+        
+        if not dry_run:
+            # Clear existing analytics tables
+            print("🗑️  Clearing existing analytics data...")
+            db.execute(text("DELETE FROM lineup_states"))
+            db.execute(text("DELETE FROM substitution_events"))
+            db.commit()
+            print("  ✅ Analytics tables cleared")
+        else:
+            print("  [DRY RUN] Would clear analytics tables")
+        
+        # Get all games that have been processed in enhanced_games
+        print("📊 Finding games to reprocess...")
+        if limit:
+            result = db.execute(text("""
+                SELECT game_id FROM enhanced_games 
+                ORDER BY game_date DESC
+                LIMIT :limit
+            """), {"limit": limit})
+        else:
+            result = db.execute(text("""
+                SELECT game_id FROM enhanced_games 
+                ORDER BY game_date DESC
+            """))
+        all_game_ids = [row[0] for row in result.fetchall()]
+        
+        print(f"Found {len(all_game_ids):,} games to reprocess")
+        print()
+        
+        # Process games in batches to get raw JSON and repopulate analytics
+        batch_size = 100
+        total_processed = 0
+        total_errors = 0
+        
+        for i in range(0, len(all_game_ids), batch_size):
+            batch_game_ids = all_game_ids[i:i + batch_size]
+            
+            print(f"Processing batch {i // batch_size + 1} ({len(batch_game_ids)} games)...")
+            
+            # Get raw JSON for this batch
+            placeholders = ','.join([f':game_id_{j}' for j in range(len(batch_game_ids))])
+            params = {f'game_id_{j}': game_id for j, game_id in enumerate(batch_game_ids)}
+            
+            raw_data_query = text(f"""
+                SELECT game_id, raw_json 
+                FROM raw_game_data 
+                WHERE game_id IN ({placeholders})
+            """)
+            
+            raw_data_result = db.execute(raw_data_query, params)
+            raw_data_map = {row[0]: json.loads(row[1]) if isinstance(row[1], str) else row[1] 
+                           for row in raw_data_result.fetchall()}
+            
+            # Process each game in the batch
+            for game_id in batch_game_ids:
+                if game_id not in raw_data_map:
+                    print(f"  ⚠️ No raw data found for {game_id}")
+                    total_errors += 1
+                    continue
+                
+                try:
+                    raw_json = raw_data_map[game_id]
+                    
+                    if not dry_run:
+                        # Extract and insert lineup tracking data (suppress warnings for cleaner output)
+                        import sys
+                        from io import StringIO
+                        
+                        # Capture warnings temporarily
+                        old_stdout = sys.stdout
+                        sys.stdout = StringIO()
+                        
+                        try:
+                            tracker = LineupTrackerV2(raw_json)
+                            timeline = tracker.build_lineup_timeline()
+                            substitutions = tracker.parse_substitution_events()
+                        finally:
+                            # Restore stdout
+                            sys.stdout = old_stdout
+                        
+                        # Convert to database format
+                        lineup_states = []
+                        for state in timeline:
+                            lineup_states.append({
+                                'game_id': state.game_id,
+                                'period': state.period,
+                                'clock': state.clock,
+                                'seconds_elapsed': state.seconds_elapsed,
+                                'home_team_id': state.home_team_id,
+                                'away_team_id': state.away_team_id,
+                                'home_players': state.home_players,
+                                'away_players': state.away_players
+                            })
+                        
+                        substitution_events = []
+                        for sub in substitutions:
+                            substitution_events.append({
+                                'game_id': game_id,
+                                'event_id': sub.action_number,
+                                'period': sub.period,
+                                'clock': sub.clock,
+                                'seconds_elapsed': sub.seconds_elapsed,
+                                'team_id': sub.team_id,
+                                'player_in_id': sub.player_in_id,
+                                'player_out_id': sub.player_out_id,
+                                'player_in_name': sub.player_in_name,
+                                'player_out_name': sub.player_out_name,
+                                'event_description': sub.description
+                            })
+                        
+                        # Insert data
+                        populator = EnhancedSchemaPopulator(dry_run=False)
+                        populator.db = db  # Use same connection
+                        populator.insert_lineup_states(lineup_states)
+                        populator.insert_substitution_events(substitution_events)
+                        db.commit()
+                    
+                    total_processed += 1
+                    if total_processed % 10 == 0:
+                        print(f"    Processed {total_processed}/{len(all_game_ids)} games...")
+                        
+                except Exception as e:
+                    print(f"  ❌ Error processing {game_id}: {str(e)[:100]}...")
+                    total_errors += 1
+                    if not dry_run:
+                        try:
+                            db.rollback()
+                        except:
+                            pass
+                    continue
+        
+        print()
+        print("=" * 60)
+        print("BACKFILL SUMMARY:")
+        print(f"  Games processed: {total_processed:,}")
+        print(f"  Games with errors: {total_errors:,}")
+        
+        if not dry_run:
+            # Get final counts
+            final_lineup_states = db.execute(text("SELECT COUNT(*) FROM lineup_states")).scalar()
+            final_substitution_events = db.execute(text("SELECT COUNT(*) FROM substitution_events")).scalar()
+            
+            print(f"  Final lineup states: {final_lineup_states:,}")
+            print(f"  Final substitution events: {final_substitution_events:,}")
+        
+    finally:
+        db.close()
 
 
 def main():
@@ -1037,19 +1563,23 @@ def main():
     parser.add_argument('--limit', type=int, help='Limit number of games to process')
     parser.add_argument('--game-id', type=str, help='Process specific game ID')
     parser.add_argument('--dry-run', action='store_true', help='Show what would be done without making changes')
+    parser.add_argument('--backfill', action='store_true', help='Backfill all analytics-derived data (clears and repopulates lineup_states and substitution_events)')
     
     args = parser.parse_args()
     
-    populator = EnhancedSchemaPopulator(dry_run=args.dry_run)
-    
-    try:
-        populator.run(limit=args.limit, game_id=args.game_id)
-    except KeyboardInterrupt:
-        print("\nProcess interrupted by user")
-    except Exception as e:
-        print(f"Error: {e}")
-    finally:
-        populator.close()
+    if args.backfill:
+        backfill_analytics_data(dry_run=args.dry_run, limit=args.limit)
+    else:
+        populator = EnhancedSchemaPopulator(dry_run=args.dry_run)
+        
+        try:
+            populator.run(limit=args.limit, game_id=args.game_id)
+        except KeyboardInterrupt:
+            print("\nProcess interrupted by user")
+        except Exception as e:
+            print(f"Error: {e}")
+        finally:
+            populator.close()
 
 
 if __name__ == "__main__":
