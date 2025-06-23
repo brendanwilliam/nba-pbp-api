@@ -28,6 +28,7 @@ class DatabaseStats:
     
     def __init__(self):
         self.db = next(get_db())
+        self.engine = self.db.bind
         
     def close(self):
         """Close database connection"""
@@ -610,6 +611,99 @@ class DatabaseStats:
         
         return report
     
+    def get_games_by_season_and_type(self) -> List[Dict[str, Any]]:
+        """Get game counts by season and type (regular/playoff/playin)"""
+        with self.engine.connect() as conn:
+            result = conn.execute(text("""
+                SELECT 
+                    -- Extract season from game_id positions 4-5 and convert to proper format
+                    CASE 
+                        WHEN SUBSTRING(game_id, 4, 2)::int >= 96 THEN 
+                            CONCAT('19', SUBSTRING(game_id, 4, 2), '-', 
+                                   CASE 
+                                       WHEN SUBSTRING(game_id, 4, 2)::int = 99 THEN '00'
+                                       ELSE LPAD(CAST(SUBSTRING(game_id, 4, 2)::int + 1 AS TEXT), 2, '0')
+                                   END)
+                        ELSE 
+                            CONCAT('20', LPAD(SUBSTRING(game_id, 4, 2), 2, '0'), '-', 
+                                   LPAD(CAST(SUBSTRING(game_id, 4, 2)::int + 1 AS TEXT), 2, '0'))
+                    END as extracted_season,
+                    CASE 
+                        WHEN SUBSTRING(game_id, 3, 1) = '2' THEN 'regular'
+                        WHEN SUBSTRING(game_id, 3, 1) = '4' THEN 'playoff'
+                        WHEN SUBSTRING(game_id, 3, 1) = '5' THEN 'playin'
+                        ELSE 'other'
+                    END as game_type,
+                    COUNT(*) as game_count
+                FROM enhanced_games
+                GROUP BY extracted_season, game_type
+                ORDER BY extracted_season, game_type
+            """))
+            
+            # Organize data by season
+            seasons_data = {}
+            for row in result:
+                season = row.extracted_season  # Use the correctly extracted season
+                if season not in seasons_data:
+                    seasons_data[season] = {'regular': 0, 'playoff': 0, 'playin': 0, 'other': 0}
+                seasons_data[season][row.game_type] = row.game_count
+            
+            # Convert to list format
+            season_list = []
+            for season in sorted(seasons_data.keys()):
+                data = seasons_data[season]
+                total = sum(data.values())
+                season_list.append({
+                    'season': season,
+                    'regular': data['regular'],
+                    'playoff': data['playoff'],
+                    'playin': data['playin'],
+                    'other': data['other'],
+                    'total': total
+                })
+            
+            return season_list
+
+    def print_season_breakdown_table(self):
+        """Print a formatted table of games by season and type"""
+        print("=" * 80)
+        print("NBA GAMES BY SEASON AND TYPE")
+        print("=" * 80)
+        
+        season_data = self.get_games_by_season_and_type()
+        
+        # Print header
+        print(f"{'Season':<12} {'Regular':<10} {'Playoff':<10} {'Play-In':<10} {'Other':<8} {'Total':<8}")
+        print("-" * 80)
+        
+        # Print data rows
+        total_regular = 0
+        total_playoff = 0
+        total_playin = 0
+        total_other = 0
+        total_all = 0
+        
+        for season_info in season_data:
+            season = season_info['season']
+            regular = season_info['regular']
+            playoff = season_info['playoff']
+            playin = season_info['playin']
+            other = season_info['other']
+            total = season_info['total']
+            
+            total_regular += regular
+            total_playoff += playoff
+            total_playin += playin
+            total_other += other
+            total_all += total
+            
+            print(f"{season:<12} {regular:<10} {playoff:<10} {playin:<10} {other:<8} {total:<8}")
+        
+        # Print totals
+        print("-" * 80)
+        print(f"{'TOTAL':<12} {total_regular:<10} {total_playoff:<10} {total_playin:<10} {total_other:<8} {total_all:<8}")
+        print("=" * 80)
+
     def print_summary_report(self):
         """Print a human-readable summary of the database"""
         print("=" * 80)
@@ -680,7 +774,7 @@ class DatabaseStats:
         print("=" * 80)
 
 
-def run_database_stats(json_output=False, table_name=None, summary=True):
+def run_database_stats(json_output=False, table_name=None, summary=True, by_season=False):
     """
     Run database stats programmatically (for module usage)
     
@@ -688,6 +782,7 @@ def run_database_stats(json_output=False, table_name=None, summary=True):
         json_output (bool): If True, return full report as dict instead of printing
         table_name (str): If provided, return insights for specific table only
         summary (bool): If True, print summary report (only used when other options are False)
+        by_season (bool): If True, print games by season and type table
     
     Returns:
         dict: Database statistics (if json_output=True or table_name provided)
@@ -700,6 +795,9 @@ def run_database_stats(json_output=False, table_name=None, summary=True):
             return stats.get_table_insights(table_name)
         elif json_output:
             return stats.generate_full_report()
+        elif by_season:
+            stats.print_season_breakdown_table()
+            return None
         elif summary:
             stats.print_summary_report()
             return None
@@ -723,6 +821,7 @@ def main():
     parser.add_argument('--json', action='store_true', help='Output full report as JSON')
     parser.add_argument('--table', type=str, help='Get detailed insights for specific table')
     parser.add_argument('--summary', action='store_true', default=True, help='Show summary report (default)')
+    parser.add_argument('--by-season', action='store_true', help='Show games by season and type (regular/playoff/playin)')
     
     args = parser.parse_args()
     
@@ -735,6 +834,9 @@ def main():
             # Full JSON report
             result = run_database_stats(json_output=True)
             print(json.dumps(result, indent=2, default=str))
+        elif args.by_season:
+            # Show games by season breakdown
+            run_database_stats(by_season=True)
         else:
             # Human-readable summary
             run_database_stats(summary=True)
