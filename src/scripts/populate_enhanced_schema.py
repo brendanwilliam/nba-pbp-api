@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 try:
     from core.database import get_db
-    from analytics.lineup_tracker_v2 import LineupTrackerV2
+    from analytics.lineup_tracker import LineupTracker
     from sqlalchemy import text, select, and_
     from sqlalchemy.orm import Session
     from sqlalchemy.exc import IntegrityError
@@ -222,7 +222,7 @@ class EnhancedSchemaPopulator:
             if game_id and len(game_id) >= 5:
                 try:
                     year = int(game_id[1:5])  # Extract year from game_id (2003)
-                    season = f"{str(year)[2:]:0>2}{str(year+1)[2:]:0>2}"  # Convert to season format (e.g., "0304")
+                    season = f"{year}-{str(year+1)[2:]}"  # Convert to season format (e.g., "2003-04")
                 except (ValueError, IndexError):
                     season = None
             
@@ -233,9 +233,9 @@ class EnhancedSchemaPopulator:
                     # NBA season spans two years, games after June are next season
                     month = int(game_date[5:7]) if len(game_date) >= 7 else 12
                     if month >= 7:  # July onwards is new season
-                        season = f"{str(date_year)[2:]}{str(date_year+1)[2:]}"
+                        season = f"{date_year}-{str(date_year+1)[2:]}"
                     else:  # January-June is previous season
-                        season = f"{str(date_year-1)[2:]}{str(date_year)[2:]}"
+                        season = f"{date_year-1}-{str(date_year)[2:]}"
                 except (ValueError, IndexError):
                     season = "unknown"
             
@@ -1119,10 +1119,10 @@ class EnhancedSchemaPopulator:
         return inserted_count
     
     def extract_lineup_tracking_data(self, raw_json: Dict[str, Any], game_id: str) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-        """Extract lineup states and substitution events using LineupTrackerV2"""
+        """Extract lineup states and substitution events using LineupTracker"""
         try:
             # Initialize the lineup tracker with the game data
-            tracker = LineupTrackerV2(raw_json)
+            tracker = LineupTracker(raw_json)
             
             # Build the lineup timeline
             timeline = tracker.build_lineup_timeline()
@@ -1481,7 +1481,7 @@ def backfill_analytics_data(dry_run: bool = False, limit: Optional[int] = None):
                         sys.stdout = StringIO()
                         
                         try:
-                            tracker = LineupTrackerV2(raw_json)
+                            tracker = LineupTracker(raw_json)
                             timeline = tracker.build_lineup_timeline()
                             substitutions = tracker.parse_substitution_events()
                         finally:
