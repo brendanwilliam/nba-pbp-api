@@ -56,7 +56,7 @@ CREATE TABLE IF NOT EXISTS scraping_errors (
     stack_trace TEXT,
     occurred_at TIMESTAMP DEFAULT NOW(),
     retry_number INTEGER DEFAULT 0,
-    FOREIGN KEY (game_id) REFERENCES scraping_queue(game_id)
+    FOREIGN KEY (game_id) REFERENCES game_url_queue(game_id)
 );
 
 -- Season progress tracking

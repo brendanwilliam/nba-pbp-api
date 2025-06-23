@@ -28,6 +28,7 @@ class DatabaseStats:
     
     def __init__(self):
         self.db = next(get_db())
+        self.engine = self.db.bind
         
     def close(self):
         """Close database connection"""
@@ -149,6 +150,18 @@ class DatabaseStats:
                 insights.update(self._get_scraping_errors_insights())
             elif table_name == 'teams':
                 insights.update(self._get_teams_insights())
+            elif table_name == 'enhanced_games':
+                insights.update(self._get_enhanced_games_insights())
+            elif table_name == 'play_events':
+                insights.update(self._get_play_events_insights())
+            elif table_name == 'player_game_stats':
+                insights.update(self._get_player_game_stats_insights())
+            elif table_name == 'team_game_stats':
+                insights.update(self._get_team_game_stats_insights())
+            elif table_name == 'arenas':
+                insights.update(self._get_arenas_insights())
+            elif table_name == 'officials':
+                insights.update(self._get_officials_insights())
                 
         except Exception as e:
             insights['error'] = f"Failed to get insights for {table_name}: {e}"
@@ -356,21 +369,214 @@ class DatabaseStats:
     def _get_teams_insights(self) -> Dict[str, Any]:
         """Get insights for teams table"""
         try:
-            # Team statistics
-            stats_result = self.db.execute(text("""
-                SELECT 
-                    COUNT(*) as total_teams,
-                    COUNT(DISTINCT city) as unique_cities,
-                    COUNT(*) FILTER (WHERE active = true) as active_teams
-                FROM teams
-            """))
+            # Team statistics - handle both schemas
+            try:
+                # Try new schema first
+                stats_result = self.db.execute(text("""
+                    SELECT 
+                        COUNT(*) as total_teams,
+                        COUNT(DISTINCT team_city) as unique_cities
+                    FROM teams
+                """))
+            except:
+                # Fall back to old schema
+                stats_result = self.db.execute(text("""
+                    SELECT 
+                        COUNT(*) as total_teams,
+                        COUNT(DISTINCT city) as unique_cities
+                    FROM teams
+                """))
             stats_row = stats_result.fetchone()
             
             return {
                 'team_summary': {
                     'total_teams': stats_row.total_teams,
+                    'unique_cities': stats_row.unique_cities
+                }
+            }
+        except Exception as e:
+            return {'insights_error': str(e)}
+    
+    def _get_enhanced_games_insights(self) -> Dict[str, Any]:
+        """Get insights for enhanced_games table"""
+        try:
+            # Game statistics
+            stats_result = self.db.execute(text("""
+                SELECT 
+                    COUNT(*) as total_games,
+                    COUNT(DISTINCT season) as unique_seasons,
+                    COUNT(*) FILTER (WHERE game_status = 3) as final_games,
+                    COUNT(*) FILTER (WHERE game_status = 2) as live_games,
+                    COUNT(*) FILTER (WHERE game_status = 1) as scheduled_games,
+                    AVG(attendance) as avg_attendance,
+                    MIN(game_date) as earliest_game,
+                    MAX(game_date) as latest_game
+                FROM enhanced_games
+            """))
+            stats_row = stats_result.fetchone()
+            
+            return {
+                'game_summary': {
+                    'total_games': stats_row.total_games,
+                    'unique_seasons': stats_row.unique_seasons,
+                    'final_games': stats_row.final_games,
+                    'live_games': stats_row.live_games,
+                    'scheduled_games': stats_row.scheduled_games,
+                    'avg_attendance': round(stats_row.avg_attendance or 0),
+                    'date_range': {
+                        'earliest': stats_row.earliest_game.isoformat() if stats_row.earliest_game else None,
+                        'latest': stats_row.latest_game.isoformat() if stats_row.latest_game else None
+                    }
+                }
+            }
+        except Exception as e:
+            return {'insights_error': str(e)}
+    
+    def _get_play_events_insights(self) -> Dict[str, Any]:
+        """Get insights for play_events table"""
+        try:
+            # Event statistics
+            stats_result = self.db.execute(text("""
+                SELECT 
+                    COUNT(*) as total_events,
+                    COUNT(DISTINCT game_id) as unique_games,
+                    COUNT(DISTINCT event_type) as unique_event_types,
+                    COUNT(*) FILTER (WHERE shot_made = true) as made_shots,
+                    COUNT(*) FILTER (WHERE shot_made = false) as missed_shots,
+                    AVG(shot_distance) FILTER (WHERE shot_distance IS NOT NULL) as avg_shot_distance
+                FROM play_events
+            """))
+            stats_row = stats_result.fetchone()
+            
+            # Event type distribution
+            event_types_result = self.db.execute(text("""
+                SELECT event_type, COUNT(*) as count
+                FROM play_events
+                GROUP BY event_type
+                ORDER BY count DESC
+                LIMIT 10
+            """))
+            
+            return {
+                'event_summary': {
+                    'total_events': stats_row.total_events,
+                    'unique_games': stats_row.unique_games,
+                    'unique_event_types': stats_row.unique_event_types,
+                    'made_shots': stats_row.made_shots,
+                    'missed_shots': stats_row.missed_shots,
+                    'avg_shot_distance': round(stats_row.avg_shot_distance or 0, 1),
+                    'events_per_game': round(stats_row.total_events / max(stats_row.unique_games, 1), 1)
+                },
+                'top_event_types': [{'type': r.event_type, 'count': r.count} for r in event_types_result]
+            }
+        except Exception as e:
+            return {'insights_error': str(e)}
+    
+    def _get_player_game_stats_insights(self) -> Dict[str, Any]:
+        """Get insights for player_game_stats table"""
+        try:
+            # Player statistics
+            stats_result = self.db.execute(text("""
+                SELECT 
+                    COUNT(*) as total_player_games,
+                    COUNT(DISTINCT player_id) as unique_players,
+                    COUNT(DISTINCT game_id) as unique_games,
+                    AVG(points) as avg_points,
+                    MAX(points) as max_points,
+                    AVG(rebounds_total) as avg_rebounds,
+                    AVG(assists) as avg_assists,
+                    COUNT(*) FILTER (WHERE starter = true) as starter_records
+                FROM player_game_stats
+            """))
+            stats_row = stats_result.fetchone()
+            
+            return {
+                'player_stats_summary': {
+                    'total_player_games': stats_row.total_player_games,
+                    'unique_players': stats_row.unique_players,
+                    'unique_games': stats_row.unique_games,
+                    'avg_points': round(stats_row.avg_points or 0, 1),
+                    'max_points': stats_row.max_points,
+                    'avg_rebounds': round(stats_row.avg_rebounds or 0, 1),
+                    'avg_assists': round(stats_row.avg_assists or 0, 1),
+                    'starter_records': stats_row.starter_records
+                }
+            }
+        except Exception as e:
+            return {'insights_error': str(e)}
+    
+    def _get_team_game_stats_insights(self) -> Dict[str, Any]:
+        """Get insights for team_game_stats table"""
+        try:
+            # Team statistics
+            stats_result = self.db.execute(text("""
+                SELECT 
+                    COUNT(*) as total_team_games,
+                    COUNT(DISTINCT team_id) as unique_teams,
+                    COUNT(DISTINCT game_id) as unique_games,
+                    AVG(points) as avg_points,
+                    MAX(points) as max_points,
+                    AVG(field_goals_percentage) as avg_fg_pct,
+                    AVG(three_pointers_percentage) as avg_3pt_pct
+                FROM team_game_stats
+            """))
+            stats_row = stats_result.fetchone()
+            
+            return {
+                'team_stats_summary': {
+                    'total_team_games': stats_row.total_team_games,
+                    'unique_teams': stats_row.unique_teams,
+                    'unique_games': stats_row.unique_games,
+                    'avg_points': round(stats_row.avg_points or 0, 1),
+                    'max_points': stats_row.max_points,
+                    'avg_fg_percentage': round(stats_row.avg_fg_pct or 0, 3),
+                    'avg_3pt_percentage': round(stats_row.avg_3pt_pct or 0, 3)
+                }
+            }
+        except Exception as e:
+            return {'insights_error': str(e)}
+    
+    def _get_arenas_insights(self) -> Dict[str, Any]:
+        """Get insights for arenas table"""
+        try:
+            # Arena statistics
+            stats_result = self.db.execute(text("""
+                SELECT 
+                    COUNT(*) as total_arenas,
+                    COUNT(DISTINCT arena_city) as unique_cities,
+                    COUNT(DISTINCT arena_state) as unique_states,
+                    AVG(capacity) as avg_capacity,
+                    MAX(capacity) as max_capacity
+                FROM arenas
+            """))
+            stats_row = stats_result.fetchone()
+            
+            return {
+                'arena_summary': {
+                    'total_arenas': stats_row.total_arenas,
                     'unique_cities': stats_row.unique_cities,
-                    'active_teams': stats_row.active_teams
+                    'unique_states': stats_row.unique_states,
+                    'avg_capacity': round(stats_row.avg_capacity or 0),
+                    'max_capacity': stats_row.max_capacity
+                }
+            }
+        except Exception as e:
+            return {'insights_error': str(e)}
+    
+    def _get_officials_insights(self) -> Dict[str, Any]:
+        """Get insights for officials table"""
+        try:
+            # Officials statistics
+            stats_result = self.db.execute(text("""
+                SELECT 
+                    COUNT(*) as total_officials
+                FROM officials
+            """))
+            stats_row = stats_result.fetchone()
+            
+            return {
+                'officials_summary': {
+                    'total_officials': stats_row.total_officials
                 }
             }
         except Exception as e:
@@ -405,6 +611,99 @@ class DatabaseStats:
         
         return report
     
+    def get_games_by_season_and_type(self) -> List[Dict[str, Any]]:
+        """Get game counts by season and type (regular/playoff/playin)"""
+        with self.engine.connect() as conn:
+            result = conn.execute(text("""
+                SELECT 
+                    -- Extract season from game_id positions 4-5 and convert to proper format
+                    CASE 
+                        WHEN SUBSTRING(game_id, 4, 2)::int >= 96 THEN 
+                            CONCAT('19', SUBSTRING(game_id, 4, 2), '-', 
+                                   CASE 
+                                       WHEN SUBSTRING(game_id, 4, 2)::int = 99 THEN '00'
+                                       ELSE LPAD(CAST(SUBSTRING(game_id, 4, 2)::int + 1 AS TEXT), 2, '0')
+                                   END)
+                        ELSE 
+                            CONCAT('20', LPAD(SUBSTRING(game_id, 4, 2), 2, '0'), '-', 
+                                   LPAD(CAST(SUBSTRING(game_id, 4, 2)::int + 1 AS TEXT), 2, '0'))
+                    END as extracted_season,
+                    CASE 
+                        WHEN SUBSTRING(game_id, 3, 1) = '2' THEN 'regular'
+                        WHEN SUBSTRING(game_id, 3, 1) = '4' THEN 'playoff'
+                        WHEN SUBSTRING(game_id, 3, 1) = '5' THEN 'playin'
+                        ELSE 'other'
+                    END as game_type,
+                    COUNT(*) as game_count
+                FROM enhanced_games
+                GROUP BY extracted_season, game_type
+                ORDER BY extracted_season, game_type
+            """))
+            
+            # Organize data by season
+            seasons_data = {}
+            for row in result:
+                season = row.extracted_season  # Use the correctly extracted season
+                if season not in seasons_data:
+                    seasons_data[season] = {'regular': 0, 'playoff': 0, 'playin': 0, 'other': 0}
+                seasons_data[season][row.game_type] = row.game_count
+            
+            # Convert to list format
+            season_list = []
+            for season in sorted(seasons_data.keys()):
+                data = seasons_data[season]
+                total = sum(data.values())
+                season_list.append({
+                    'season': season,
+                    'regular': data['regular'],
+                    'playoff': data['playoff'],
+                    'playin': data['playin'],
+                    'other': data['other'],
+                    'total': total
+                })
+            
+            return season_list
+
+    def print_season_breakdown_table(self):
+        """Print a formatted table of games by season and type"""
+        print("=" * 80)
+        print("NBA GAMES BY SEASON AND TYPE")
+        print("=" * 80)
+        
+        season_data = self.get_games_by_season_and_type()
+        
+        # Print header
+        print(f"{'Season':<12} {'Regular':<10} {'Playoff':<10} {'Play-In':<10} {'Other':<8} {'Total':<8}")
+        print("-" * 80)
+        
+        # Print data rows
+        total_regular = 0
+        total_playoff = 0
+        total_playin = 0
+        total_other = 0
+        total_all = 0
+        
+        for season_info in season_data:
+            season = season_info['season']
+            regular = season_info['regular']
+            playoff = season_info['playoff']
+            playin = season_info['playin']
+            other = season_info['other']
+            total = season_info['total']
+            
+            total_regular += regular
+            total_playoff += playoff
+            total_playin += playin
+            total_other += other
+            total_all += total
+            
+            print(f"{season:<12} {regular:<10} {playoff:<10} {playin:<10} {other:<8} {total:<8}")
+        
+        # Print totals
+        print("-" * 80)
+        print(f"{'TOTAL':<12} {total_regular:<10} {total_playoff:<10} {total_playin:<10} {total_other:<8} {total_all:<8}")
+        print("=" * 80)
+
     def print_summary_report(self):
         """Print a human-readable summary of the database"""
         print("=" * 80)
@@ -475,7 +774,7 @@ class DatabaseStats:
         print("=" * 80)
 
 
-def run_database_stats(json_output=False, table_name=None, summary=True):
+def run_database_stats(json_output=False, table_name=None, summary=True, by_season=False):
     """
     Run database stats programmatically (for module usage)
     
@@ -483,6 +782,7 @@ def run_database_stats(json_output=False, table_name=None, summary=True):
         json_output (bool): If True, return full report as dict instead of printing
         table_name (str): If provided, return insights for specific table only
         summary (bool): If True, print summary report (only used when other options are False)
+        by_season (bool): If True, print games by season and type table
     
     Returns:
         dict: Database statistics (if json_output=True or table_name provided)
@@ -495,6 +795,9 @@ def run_database_stats(json_output=False, table_name=None, summary=True):
             return stats.get_table_insights(table_name)
         elif json_output:
             return stats.generate_full_report()
+        elif by_season:
+            stats.print_season_breakdown_table()
+            return None
         elif summary:
             stats.print_summary_report()
             return None
@@ -518,6 +821,7 @@ def main():
     parser.add_argument('--json', action='store_true', help='Output full report as JSON')
     parser.add_argument('--table', type=str, help='Get detailed insights for specific table')
     parser.add_argument('--summary', action='store_true', default=True, help='Show summary report (default)')
+    parser.add_argument('--by-season', action='store_true', help='Show games by season and type (regular/playoff/playin)')
     
     args = parser.parse_args()
     
@@ -530,6 +834,9 @@ def main():
             # Full JSON report
             result = run_database_stats(json_output=True)
             print(json.dumps(result, indent=2, default=str))
+        elif args.by_season:
+            # Show games by season breakdown
+            run_database_stats(by_season=True)
         else:
             # Human-readable summary
             run_database_stats(summary=True)

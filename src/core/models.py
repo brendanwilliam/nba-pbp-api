@@ -1,6 +1,6 @@
 """Database models for NBA play-by-play data."""
 
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, JSON, ForeignKey, Date
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, JSON, ForeignKey, Date, BigInteger
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from .database import Base
@@ -81,6 +81,94 @@ class RawGameData(Base):
     scraped_at = Column(DateTime(timezone=True), server_default=func.now())
     json_size = Column(Integer)  # Size in bytes
     processing_status = Column(String(20), default='raw', index=True)  # raw, processed, failed
+
+
+class SubstitutionEvent(Base):
+    """Individual substitution events during games."""
+    __tablename__ = "substitution_events"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    game_id = Column(String(20), nullable=False, index=True)
+    action_number = Column(Integer, nullable=False)
+    period = Column(Integer, nullable=False)
+    clock_time = Column(String(20), nullable=False)
+    seconds_elapsed = Column(Integer, nullable=False)
+    team_id = Column(BigInteger, nullable=False, index=True)
+    player_out_id = Column(BigInteger, nullable=False, index=True)
+    player_out_name = Column(String(100), nullable=False)
+    player_in_id = Column(BigInteger, nullable=False, index=True)
+    player_in_name = Column(String(100), nullable=False)
+    description = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class PlayEvent(Base):
+    """Play-by-play events during games."""
+    __tablename__ = "play_events"
+    
+    event_id = Column(Integer, primary_key=True, index=True)
+    game_id = Column(String(20), nullable=False, index=True)
+    
+    # Timing
+    period = Column(Integer, nullable=False)
+    time_remaining = Column(String(20))  # format: PT12M34.56S
+    time_elapsed_seconds = Column(Integer)  # calculated seconds from game start
+    
+    # Event details
+    event_type = Column(String(50), nullable=False)
+    event_action_type = Column(String(50))
+    event_sub_type = Column(String(50))
+    description = Column(Text)
+    
+    # Score context
+    home_score = Column(Integer)
+    away_score = Column(Integer)
+    score_margin = Column(Integer)  # home_score - away_score
+    
+    # Player and team
+    player_id = Column(Integer)
+    team_id = Column(Integer)
+    
+    # Shot details
+    shot_distance = Column(String(20))  # keeping as string like in enhanced_schema.sql
+    shot_made = Column(Boolean)
+    shot_type = Column(String(50))
+    shot_zone = Column(String(50))
+    shot_x = Column(String(20))  # keeping as string like in enhanced_schema.sql
+    shot_y = Column(String(20))  # keeping as string like in enhanced_schema.sql
+    
+    # Assists
+    assist_player_id = Column(Integer)
+    
+    # Event order
+    event_order = Column(Integer)
+    
+    # Possession tracking
+    possession_change = Column(Boolean, default=False)
+    
+    # Video/highlights
+    video_available = Column(Boolean, default=False)
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class LineupState(Base):
+    """Lineup state at specific moments during games."""
+    __tablename__ = "lineup_states"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    game_id = Column(String(20), nullable=False, index=True)
+    period = Column(Integer, nullable=False)
+    clock_time = Column(String(20), nullable=False)
+    seconds_elapsed = Column(Integer, nullable=False, index=True)
+    team_id = Column(BigInteger, nullable=False, index=True)
+    player_1_id = Column(BigInteger, nullable=False)
+    player_2_id = Column(BigInteger, nullable=False)
+    player_3_id = Column(BigInteger, nullable=False)
+    player_4_id = Column(BigInteger, nullable=False)
+    player_5_id = Column(BigInteger, nullable=False)
+    lineup_hash = Column(String(64), nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
 # Add back references
