@@ -3,6 +3,12 @@
 ## Objective
 Develop a comprehensive REST API that provides access to NBA play-by-play data, statistics, and analytics through well-designed endpoints with proper authentication, rate limiting, and documentation.
 
+## Ideal State
+The ultimate goal for this this project is to allow users to create specific and complex queries to retrieve player/team/lineup data. All user queries need to follow the following high-level rules:
+
+1. Is this query about a player/team/lineup? If it is about a player or a team, the query should be able to be answered by 
+
+
 ## Background
 **Current State**: Enhanced database schema designed, data quality framework available, 8,765+ games of data ready for API development. Create a production-ready API that serves NBA data with high performance and reliability.
 

@@ -34,10 +34,7 @@ class DatabaseComparison:
     def __init__(self, local_url: str = None, neon_url: str = None):
         """Initialize with database URLs"""
         self.local_url = local_url or "postgresql://brendan@localhost:5432/nba_pbp"
-        self.neon_url = neon_url or os.getenv('DATABASE_URL')
-        
-        if not self.neon_url:
-            raise ValueError("Neon database URL not found. Set DATABASE_URL environment variable.")
+        self.neon_url = neon_url or "postgresql://nba_pbp_owner:npg_3wBZK4JXYVIR@ep-nameless-morning-a88pbjet-pooler.eastus2.azure.neon.tech/nba_pbp?sslmode=require"
     
     def connect_to_database(self, url: str) -> psycopg2.extensions.connection:
         """Create connection to database"""

@@ -850,10 +850,9 @@ def main():
         database_url = "postgresql://brendan@localhost:5432/nba_pbp"
         print("Using LOCAL PostgreSQL database...")
     elif args.neon:
-        database_url = os.getenv('DATABASE_URL')
-        if not database_url:
-            print("Error: DATABASE_URL not found in environment variables for Neon database")
-            sys.exit(1)
+        # Force use of Neon URL from .env file, ignore system env var
+        neon_url = "postgresql://nba_pbp_owner:npg_3wBZK4JXYVIR@ep-nameless-morning-a88pbjet-pooler.eastus2.azure.neon.tech/nba_pbp?sslmode=require"
+        database_url = neon_url
         print("Using NEON cloud database...")
     else:
         # Default behavior - use .env file setting
