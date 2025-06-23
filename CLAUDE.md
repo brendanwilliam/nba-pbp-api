@@ -38,6 +38,8 @@ The project follows a modular architecture with completed and planned components
   - `enhanced_schema.sql`: Comprehensive normalized database schema for NBA game data
   - `queue_manager.py`: Queue operations, status tracking, and progress monitoring
   - `database_stats.py`: Comprehensive database statistics and monitoring tool (CLI + module)
+  - `database_comparison.py`: Compare schemas and data between local and cloud databases
+  - `synchronise_databases.py`: Full database synchronization from local to cloud with migrations
 
 - **src/data_quality/**: Data validation and quality assurance
   - `validation_framework.py`: Comprehensive validation framework for NBA JSON data
@@ -75,6 +77,37 @@ This is a Python project. When setting up:
 1. Create and activate a virtual environment before any Python operations
 2. Database configuration will be needed for PostgreSQL connection
 3. The project will require web scraping libraries for NBA.com data extraction
+
+## Database Management
+
+The project includes comprehensive database management tools for development and deployment:
+
+### Key Commands
+```bash
+# Monitor database statistics and progress
+python -m src.database.database_stats --local   # Local database
+python -m src.database.database_stats --neon    # Cloud database
+
+# Compare local and cloud databases for differences
+python -m src.database.database_comparison
+
+# Synchronize local changes to cloud (development to production)
+python -m src.database.synchronise_databases --dry-run  # Preview first
+python -m src.database.synchronise_databases            # Full deployment
+```
+
+### Development Workflow
+1. **Develop locally** with full 23M+ row dataset in PostgreSQL
+2. **Compare databases** to see what changes need deployment
+3. **Preview synchronization** with dry-run to validate changes
+4. **Deploy to cloud** with full data and schema synchronization
+
+The synchronization tool handles:
+- Alembic schema migrations
+- Complete data replacement (23.6M+ rows)
+- Sequence updates and foreign key constraints
+- Batch processing for large datasets
+- Error handling and rollback capabilities
 
 ## Key Implementation Details
 

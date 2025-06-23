@@ -26,9 +26,18 @@ except ImportError as e:
 class DatabaseStats:
     """Generate comprehensive database statistics and insights"""
     
-    def __init__(self):
-        self.db = next(get_db())
-        self.engine = self.db.bind
+    def __init__(self, database_url=None):
+        if database_url:
+            # Use provided database URL
+            from sqlalchemy import create_engine
+            from sqlalchemy.orm import sessionmaker
+            self.engine = create_engine(database_url)
+            Session = sessionmaker(bind=self.engine)
+            self.db = Session()
+        else:
+            # Use default connection from get_db()
+            self.db = next(get_db())
+            self.engine = self.db.bind
         
     def close(self):
         """Close database connection"""
@@ -774,7 +783,7 @@ class DatabaseStats:
         print("=" * 80)
 
 
-def run_database_stats(json_output=False, table_name=None, summary=True, by_season=False):
+def run_database_stats(json_output=False, table_name=None, summary=True, by_season=False, database_url=None):
     """
     Run database stats programmatically (for module usage)
     
@@ -783,12 +792,13 @@ def run_database_stats(json_output=False, table_name=None, summary=True, by_seas
         table_name (str): If provided, return insights for specific table only
         summary (bool): If True, print summary report (only used when other options are False)
         by_season (bool): If True, print games by season and type table
+        database_url (str): If provided, use this database URL instead of default
     
     Returns:
         dict: Database statistics (if json_output=True or table_name provided)
         None: If printing summary
     """
-    stats = DatabaseStats()
+    stats = DatabaseStats(database_url=database_url)
     
     try:
         if table_name:
@@ -816,6 +826,10 @@ def run_database_stats(json_output=False, table_name=None, summary=True, by_seas
 def main():
     """Main entry point"""
     import argparse
+    import os
+    from dotenv import load_dotenv
+    
+    load_dotenv()
     
     parser = argparse.ArgumentParser(description='NBA Database Statistics Tool')
     parser.add_argument('--json', action='store_true', help='Output full report as JSON')
@@ -823,23 +837,50 @@ def main():
     parser.add_argument('--summary', action='store_true', default=True, help='Show summary report (default)')
     parser.add_argument('--by-season', action='store_true', help='Show games by season and type (regular/playoff/playin)')
     
+    # Database selection flags
+    db_group = parser.add_mutually_exclusive_group()
+    db_group.add_argument('--local', action='store_true', help='Use local PostgreSQL database')
+    db_group.add_argument('--neon', action='store_true', help='Use Neon cloud database')
+    
     args = parser.parse_args()
+    
+    # Determine database URL
+    database_url = None
+    if args.local:
+        database_url = "postgresql://brendan@localhost:5432/nba_pbp"
+        print("Using LOCAL PostgreSQL database...")
+    elif args.neon:
+        database_url = os.getenv('DATABASE_URL')
+        if not database_url:
+            print("Error: DATABASE_URL not found in environment variables for Neon database")
+            sys.exit(1)
+        print("Using NEON cloud database...")
+    else:
+        # Default behavior - use .env file setting
+        database_url = os.getenv('DATABASE_URL')
+        if database_url:
+            if 'localhost' in database_url:
+                print("Using LOCAL PostgreSQL database (from .env)...")
+            else:
+                print("Using NEON cloud database (from .env)...")
+        else:
+            print("Using default database connection...")
     
     try:
         if args.table:
             # Show specific table insights
-            result = run_database_stats(table_name=args.table)
+            result = run_database_stats(table_name=args.table, database_url=database_url)
             print(json.dumps(result, indent=2, default=str))
         elif args.json:
             # Full JSON report
-            result = run_database_stats(json_output=True)
+            result = run_database_stats(json_output=True, database_url=database_url)
             print(json.dumps(result, indent=2, default=str))
         elif args.by_season:
             # Show games by season breakdown
-            run_database_stats(by_season=True)
+            run_database_stats(by_season=True, database_url=database_url)
         else:
             # Human-readable summary
-            run_database_stats(summary=True)
+            run_database_stats(summary=True, database_url=database_url)
             
     except KeyboardInterrupt:
         print("\nReport generation interrupted by user")
@@ -849,3 +890,9 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# Module execution support
+if __name__ == "__main__" or __name__ == "src.database.database_stats":
+    if len(sys.argv) == 1 and __name__ == "src.database.database_stats":
+        # When run as module without args, show summary
+        run_database_stats(summary=True)

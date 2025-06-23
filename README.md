@@ -30,6 +30,13 @@ python -m src.scripts.populate_enhanced_schema --backfill --limit 100
 # View database statistics (recommended for monitoring progress)
 python -m src.database.database_stats
 
+# Compare local and cloud databases for differences
+python -m src.database.database_comparison
+
+# Synchronize local database changes to cloud (DANGEROUS - overwrites cloud data)
+python -m src.database.synchronise_databases --dry-run  # Preview changes first
+python -m src.database.synchronise_databases            # Full sync (with confirmation)
+
 # Add missing games manually to fill gaps (example: 2006-07 missing games)
 python src/scripts/manual_queue_manager.py 0020600151 0020600157 --reference 0020600158
 
@@ -336,26 +343,83 @@ python src/database/database_stats.py --by-season
 python src/database/database_stats.py --table game_url_queue
 ```
 
-### Database Statistics and Monitoring
+### Database Management and Monitoring
+
+#### Database Statistics
 
 Get comprehensive database insights and progress tracking:
 
 ```bash
 # View complete database report (recommended)
-python src/database/database_stats.py
-
-# Or run as a module
 python -m src.database.database_stats
 
 # View games by season and type breakdown
-python src/database/database_stats.py --by-season
+python -m src.database.database_stats --by-season
 
 # Get full JSON report for detailed analysis
-python src/database/database_stats.py --json
+python -m src.database.database_stats --json
 
 # Get insights for specific table
-python src/database/database_stats.py --table game_url_queue
+python -m src.database.database_stats --table game_url_queue
+
+# Compare specific databases (local vs cloud)
+python -m src.database.database_stats --local    # Use local PostgreSQL
+python -m src.database.database_stats --neon     # Use Neon cloud database
 ```
+
+#### Database Comparison
+
+Compare schemas and data between local and cloud databases:
+
+```bash
+# Compare local and Neon databases (shows differences)
+python -m src.database.database_comparison
+
+# Get detailed JSON comparison report
+python -m src.database.database_comparison --json
+
+# Use custom database URLs
+python -m src.database.database_comparison --local-url "postgresql://user@host/db" --neon-url "postgresql://user@host/db2"
+```
+
+The comparison tool provides:
+- **Schema Differences**: Missing tables, column mismatches, index differences
+- **Row Count Differences**: Data synchronization status between databases
+- **Summary Report**: Quick overview of database consistency
+
+#### Database Synchronization
+
+Synchronize local development changes to cloud database:
+
+```bash
+# ALWAYS run dry-run first to preview changes
+python -m src.database.synchronise_databases --dry-run
+
+# Full synchronization (WARNING: Overwrites all Neon data with local data)
+python -m src.database.synchronise_databases
+
+# Sync only specific tables
+python -m src.database.synchronise_databases --tables raw_game_data player_game_stats
+
+# Get JSON output for automation
+python -m src.database.synchronise_databases --json
+
+# Use custom database URLs
+python -m src.database.synchronise_databases --local-url "postgresql://user@host/local" --neon-url "postgresql://user@host/cloud"
+```
+
+**⚠️ WARNING**: Synchronization completely replaces cloud data with local data. Features include:
+- **Alembic Migrations**: Automatically runs schema migrations on target database
+- **Full Data Replacement**: Truncates and repopulates all tables
+- **Batch Processing**: Efficient handling of millions of rows
+- **Sequence Updates**: Maintains proper auto-increment values
+- **Safety Features**: Dry-run mode, confirmation prompts, error handling
+
+**Development Workflow**:
+1. Develop and test locally with full dataset
+2. Run comparison to see differences: `python -m src.database.database_comparison`
+3. Preview sync changes: `python -m src.database.synchronise_databases --dry-run`
+4. Deploy to cloud: `python -m src.database.synchronise_databases`
 
 The database statistics script provides:
 - **Database Overview**: Total size, connections, and health metrics
@@ -364,13 +428,7 @@ The database statistics script provides:
 - **Performance Metrics**: JSON data sizes, response times, and efficiency indicators
 - **Error Analysis**: Failed games, error patterns, and troubleshooting data
 
-#### Key Insights Provided:
-- **`game_url_queue`**: Status distribution, season coverage, completion rates
-- **`raw_game_data`**: JSON storage statistics, scraping timeline, data quality
-- **`scraping_sessions`**: Performance metrics, success rates, session history
-- **`scraping_errors`**: Error patterns, affected games, troubleshooting data
-
-Use this script regularly during mass scraping operations to monitor progress and identify any issues.
+Use these scripts regularly during development and deployment to monitor progress and maintain database consistency.
 
 
 
