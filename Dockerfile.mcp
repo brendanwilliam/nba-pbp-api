@@ -1,0 +1,49 @@
+# NBA Play-by-Play MCP Server - Production Docker Image
+FROM python:3.11-slim as base
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PATH="/home/appuser/.local/bin:$PATH"
+
+# Install system dependencies (lighter for MCP)
+RUN apt-get update && apt-get install -y \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN addgroup --system --gid 1001 appgroup && \
+    adduser --system --uid 1001 --gid 1001 --no-create-home appuser
+
+# Set work directory
+WORKDIR /app
+
+# Copy requirements (MCP has different/lighter requirements)
+COPY requirements.mcp.txt .
+RUN pip install --no-cache-dir -r requirements.mcp.txt
+
+# Copy shared code and MCP-specific code
+COPY src/core/ ./src/core/
+COPY src/database/ ./src/database/
+COPY src/mcp/ ./src/mcp/
+COPY alembic.ini .
+COPY alembic/ ./alembic/
+
+# Create necessary directories and set permissions
+RUN mkdir -p /app/logs && \
+    chown -R appuser:appgroup /app
+
+# Switch to non-root user
+USER appuser
+
+# Expose MCP port (different from API)
+EXPOSE 3000
+
+# Health check for MCP server
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python -c "import src.mcp.health_check" || exit 1
+
+# Run the MCP server
+CMD ["python", "-m", "src.mcp.server"]
