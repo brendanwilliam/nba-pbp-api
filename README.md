@@ -21,8 +21,20 @@ python -m src.scripts.mass_game_scraper --max-workers 10 --rate-limit 1.0 --batc
 # Populate enhanced schema from raw game data (all games)
 python -m src.scripts.populate_enhanced_schema
 
+# Backfill analytics data (lineup tracking) for all games
+python -m src.scripts.populate_enhanced_schema --backfill
+
+# Or backfill limited number of games for testing
+python -m src.scripts.populate_enhanced_schema --backfill --limit 100
+
 # View database statistics (recommended for monitoring progress)
 python -m src.database.database_stats
+
+# Add missing games manually to fill gaps (example: 2006-07 missing games)
+python src/scripts/manual_queue_manager.py 0020600151 0020600157 --reference 0020600158
+
+# Then immediately scrape the newly added games
+python -m src.scripts.mass_game_scraper --max-workers 3 --rate-limit 2.0 --batch-size 7
 ```
 
 ### Status Report (2025-06-20)
@@ -33,40 +45,42 @@ NBA PLAY-BY-PLAY DATABASE REPORT
 
 DATABASE OVERVIEW
    Database: nba_pbp
-   Total Size: 3868 MB
+   Total Size: 7865 MB
    Active Connections: 1
 
-TABLES SUMMARY (19 tables)
+TABLES SUMMARY (21 tables)
 --------------------------------------------------------------------------------
 Table Name           Size         Rows            Key Insights
 --------------------------------------------------------------------------------
-play_events          2566 MB      10,318,265      
-raw_game_data        1106 MB      21,771          21771 games, 320.80 KB avg
-player_game_stats    147 MB       614,715         
-game_url_queue       20 MB        36,685          59.26% scraped
-team_game_stats      13 MB        43,372          
-enhanced_games       5560 kB      21,687          
-players              656 kB       3,543           
+play_events          4335 MB      17,398,392      
+raw_game_data        1918 MB      36,304          36304 games, 325.93 KB avg
+lineup_states        956 MB       3,285,602       
+substitution_events  358 MB       1,495,452       
+player_game_stats    237 MB       987,675         
+team_game_stats      21 MB        72,426          
+game_url_queue       20 MB        36,685          98.96% scraped
+enhanced_games       9200 kB      36,214          
+players              680 kB       3,787           
 scraping_queue       168 kB       32              
 scrape_queue         96 kB        30              
 games                96 kB        30              
 teams                88 kB        30              
-arenas               64 kB        88              
-scraping_sessions    48 kB        51              51 sessions
-scraping_errors      32 kB        0               
+arenas               64 kB        99              
+scraping_errors      64 kB        71              
+scraping_sessions    48 kB        61              61 sessions
 alembic_version      24 kB        1               
 game_periods         16 kB        0               
-game_officials       8192 bytes   0               
 officials            8192 bytes   0               
+game_officials       8192 bytes   0               
 season_progress      8192 bytes   0               
 
 KEY METRICS
    Total Games in Queue: 36,685
-   Games Completed: 21,740
-   Completion Rate: 59.26%
-   Games Ready to Scrape: 14,628
-   JSON Data Stored: 6820.5 MB
-   Average Game Size: 320.80 KB
+   Games Completed: 36,304
+   Completion Rate: 98.96%
+   Games Ready to Scrape: 0
+   JSON Data Stored: 11555.26 MB
+   Average Game Size: 325.93 KB
 ================================================================================
 ```
 
@@ -239,6 +253,15 @@ python -m src.scripts.populate_enhanced_schema --limit 100
 
 # Dry run to see what would be processed without making changes
 python -m src.scripts.populate_enhanced_schema --dry-run --limit 10
+
+# Backfill all analytics-derived data (clears and repopulates lineup tracking tables)
+python -m src.scripts.populate_enhanced_schema --backfill
+
+# Backfill limited number of games (useful for testing)
+python -m src.scripts.populate_enhanced_schema --backfill --limit 100
+
+# Dry run backfill to see what would be done
+python -m src.scripts.populate_enhanced_schema --backfill --dry-run --limit 10
 ```
 
 The enhanced schema population features:
@@ -250,6 +273,8 @@ The enhanced schema population features:
 - **NBA Team ID Support**: Handles official NBA.com team IDs (1610612xxx format)
 - **Error Handling**: Individual game failures don't stop the entire process
 - **Progress Tracking**: Real-time status updates and summary statistics
+- **Analytics Integration**: Includes lineup tracking and substitution event extraction
+- **Backfill Support**: `--backfill` flag clears and repopulates analytics tables with latest algorithms
 
 #### Enhanced Schema Tables:
 - **`enhanced_games`**: Core game information (teams, scores, dates, arenas)
@@ -259,6 +284,57 @@ The enhanced schema population features:
 - **`arenas`**: Venue information with capacity and location data
 - **`officials`**: Game officials and referee assignments
 - **`game_periods`**: Period-by-period scoring breakdown
+- **`lineup_states`**: On-court player lineups at each moment of the game
+- **`substitution_events`**: Detailed substitution tracking with timing and player info
+
+### Manual Queue Management
+
+Add specific games or fill gaps in the scraping queue using the manual queue manager:
+
+```bash
+# Add a single game (uses reference game for metadata)
+python src/scripts/manual_queue_manager.py 0040800306 0040800306 --reference 0040800305
+
+# Add a range of consecutive games (fill sequence gaps)
+python src/scripts/manual_queue_manager.py 0029700001 0029700014 --reference 0029700015
+
+# Preview what would be added without inserting (dry run)
+python src/scripts/manual_queue_manager.py 0021400765 0021400773 --reference 0021400774 --dry-run
+
+# Add games with URL validation (currently disabled due to import issues)
+python src/scripts/manual_queue_manager.py 0041300215 0041300225 --reference 0041300214 --validate
+```
+
+#### Manual Queue Manager Features:
+- **Gap Filling**: Add missing games identified in sequence analysis
+- **Reference Metadata**: Copies season, date, type, and priority from existing games
+- **Ready for Scraping**: Games added with `validated` status for immediate processing
+- **Conflict Handling**: Automatically skips games that already exist in queue
+- **Dry Run Mode**: Preview changes before execution
+- **Flexible Input**: Handles single games, consecutive ranges, or non-consecutive lists
+
+#### Common Use Cases:
+```bash
+# Fill identified gaps from database analysis
+python src/scripts/manual_queue_manager.py 0020600151 0020600157 --reference 0020600158
+
+# Add playoff games that were missed
+python src/scripts/manual_queue_manager.py 0040900105 0040900105 --reference 0040900104
+python src/scripts/manual_queue_manager.py 0040900135 0040900135 --reference 0040900134
+
+# After adding games, immediately scrape them
+python -m src.scripts.mass_game_scraper --max-workers 3 --rate-limit 2.0 --batch-size 10
+```
+
+#### Finding Missing Games:
+Use database statistics to identify gaps:
+```bash
+# View games by season and type to spot missing counts
+python src/database/database_stats.py --by-season
+
+# Get detailed queue insights
+python src/database/database_stats.py --table game_url_queue
+```
 
 ### Database Statistics and Monitoring
 
@@ -270,6 +346,9 @@ python src/database/database_stats.py
 
 # Or run as a module
 python -m src.database.database_stats
+
+# View games by season and type breakdown
+python src/database/database_stats.py --by-season
 
 # Get full JSON report for detailed analysis
 python src/database/database_stats.py --json
