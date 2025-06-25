@@ -6,7 +6,6 @@ Handles queries for lineup performance data with on/off court analysis.
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Optional, List, Union, Dict, Any
 from datetime import date
-import json
 
 from ..models.query_params import LineupStatsQuery
 from ..models.responses import LineupStatsResponse, StatisticalAnalysis
@@ -17,8 +16,8 @@ from ..utils.database import get_db_manager, QueryExecutor, DatabaseManager
 router = APIRouter()
 
 
-@router.post("/lineup-stats", response_model=Union[LineupStatsResponse, StatisticalAnalysis])
-async def query_lineup_stats(
+@router.get("/lineup-stats", response_model=LineupStatsResponse)
+async def get_lineup_stats(
     # Lineup composition filters
     player_ids: Optional[List[int]] = Query(None, description="Players that must be in the lineup"),
     exclude_player_ids: Optional[List[int]] = Query(None, description="Players that must NOT be in the lineup"),
@@ -44,10 +43,8 @@ async def query_lineup_stats(
     limit: int = Query(100, le=10000),
     offset: int = Query(0, ge=0),
     
-    # Analysis flags
-    about: bool = Query(False, description="Include statistical summary"),
-    correlation: Optional[List[str]] = Query(None, description="Fields to calculate correlations for"),
-    regression: Optional[str] = Query(None, description="Regression analysis specification as JSON"),
+    # Simple analysis flag
+    include_summary: bool = Query(False, description="Include basic statistical summary"),
     
     db_manager: DatabaseManager = Depends(get_db_manager)
 ):
@@ -82,7 +79,7 @@ async def query_lineup_stats(
                     eg.season,
                     ARRAY_AGG(pgs.player_id ORDER BY pgs.player_id) as lineup_players,
                     SUM(pgs.points) as total_points,
-                    SUM(pgs.rebounds) as total_rebounds,
+                    SUM(pgs.rebounds_total) as total_rebounds,
                     SUM(pgs.assists) as total_assists,
                     SUM(pgs.steals) as total_steals,
                     SUM(pgs.blocks) as total_blocks,
@@ -91,7 +88,7 @@ async def query_lineup_stats(
                     COUNT(*) as players_in_lineup
                 FROM player_game_stats pgs
                 JOIN enhanced_games eg ON pgs.game_id = eg.game_id
-                WHERE pgs.minutes > 0
+                WHERE pgs.minutes_played > 0
             """
             
             params = []
@@ -132,8 +129,8 @@ async def query_lineup_stats(
             )
             SELECT 
                 lg.*,
-                t.team_name,
-                t.team_abbreviation
+                t.full_name as team_name,
+                t.tricode as team_abbreviation
             FROM lineup_games lg
             JOIN teams t ON lg.team_id = t.team_id
             WHERE 1=1
@@ -240,39 +237,25 @@ async def query_lineup_stats(
             comparison=comparison
         )
         
-        # Perform statistical analysis if requested
-        if about or correlation or regression:
-            # Convert data to DataFrame for analysis
+        # Perform basic statistical summary if requested
+        if include_summary and data:
+            # Convert data to DataFrame for basic analysis
             import pandas as pd
             df = pd.DataFrame(data)
             
-            # Parse regression specification
-            regression_spec = None
-            if regression:
-                try:
-                    regression_spec = json.loads(regression)
-                except json.JSONDecodeError:
-                    raise HTTPException(status_code=400, detail="Invalid JSON format in regression parameter")
-            
-            # Determine fields for analysis
+            # Determine fields for basic summary
             numeric_fields = [
                 "total_points", "total_rebounds", "total_assists", "total_steals", 
                 "total_blocks", "total_turnovers", "avg_plus_minus", "players_in_lineup"
             ]
             
-            about_fields = numeric_fields if about else None
-            
-            # Perform analysis
+            # Perform basic statistical summary
             analyzer = StatsAnalyzer()
             statistical_analysis = analyzer.analyze_dataframe(
-                df, about_fields, correlation, regression_spec
+                df, numeric_fields, None, None
             )
             
             response_data.statistical_analysis = statistical_analysis
-            
-            # Return statistical analysis if that's the primary request
-            if about or correlation or regression:
-                return statistical_analysis
         
         return response_data
         
@@ -314,10 +297,10 @@ async def get_common_lineups(
                 SUM(pgs.points) as total_points,
                 AVG(pgs.plus_minus) as avg_plus_minus
             FROM player_game_stats pgs
-            JOIN players p ON pgs.player_id = p.player_id
+            JOIN players p ON pgs.player_id = p.id
             JOIN enhanced_games eg ON pgs.game_id = eg.game_id
             WHERE pgs.team_id = $1
-              AND pgs.minutes > 0
+              AND pgs.minutes_played > 0
         """
         
         params = [team_id]
@@ -412,7 +395,7 @@ async def get_player_combinations(
                 pgs.game_id,
                 pgs.team_id,
                 pgs.player_id,
-                pgs.minutes,
+                pgs.minutes_played as minutes,
                 pgs.plus_minus,
                 eg.game_date,
                 eg.season

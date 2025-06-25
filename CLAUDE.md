@@ -91,18 +91,88 @@ python -m src.database.database_stats --neon    # Cloud database
 # Compare local and cloud databases for differences
 python -m src.database.database_comparison
 
-# Synchronize local changes to cloud (development to production)
+# Selective synchronization (recommended for routine updates)
+python -m src.database.selective_sync --analyze --ignore-size    # Check differences
+python -m src.database.selective_sync --sync --dry-run --ignore-size  # Preview sync
+python -m src.database.selective_sync --sync raw_game_data       # Sync specific table
+
+# Full synchronization (for major updates)
 python -m src.database.synchronise_databases --dry-run  # Preview first
 python -m src.database.synchronise_databases            # Full deployment
 ```
 
 ### Development Workflow
-1. **Develop locally** with full 23M+ row dataset in PostgreSQL
-2. **Compare databases** to see what changes need deployment
-3. **Preview synchronization** with dry-run to validate changes
-4. **Deploy to cloud** with full data and schema synchronization
 
-The synchronization tool handles:
+#### For Routine Updates (Recommended)
+1. **Develop locally** with full 23M+ row dataset in PostgreSQL
+2. **Analyze differences** to see what changes need deployment:
+   ```bash
+   python -m src.database.selective_sync --analyze --ignore-size
+   ```
+3. **Preview selective sync** with dry-run to validate changes:
+   ```bash
+   python -m src.database.selective_sync --sync --dry-run --ignore-size
+   ```
+4. **Deploy specific changes** table by table:
+   ```bash
+   python -m src.database.selective_sync --sync raw_game_data teams
+   ```
+
+#### For Major Updates (Schema Changes)
+1. **Compare full databases** to see comprehensive differences:
+   ```bash
+   python -m src.database.database_comparison
+   ```
+2. **Preview full synchronization** with dry-run:
+   ```bash
+   python -m src.database.synchronise_databases --dry-run
+   ```
+3. **Deploy to cloud** with full data and schema synchronization:
+   ```bash
+   python -m src.database.synchronise_databases
+   ```
+
+### Database Synchronization Tools
+
+#### Selective Sync Tool (src/database/selective_sync.py)
+**Recommended for routine updates** - Efficient table-by-table synchronization
+
+**Key Features:**
+- Smart difference detection (schema, row count, significant size changes)
+- Auto-sync mode: Finds and syncs all different tables automatically
+- Manual sync: Sync specific tables only
+- Large table protection: Tables >1M rows require `--force` flag
+- Schema-only or data-only sync options
+- Comprehensive safety features with automatic backups
+
+**Common Usage Patterns:**
+```bash
+# Daily routine check
+python -m src.database.selective_sync --analyze --ignore-size
+
+# Sync new scraping data
+python -m src.database.selective_sync --sync raw_game_data scraping_sessions
+
+# Auto-sync all differences (safe for routine updates)
+python -m src.database.selective_sync --sync --ignore-size
+
+# Force sync large table with verbose progress
+python -m src.database.selective_sync --sync play_events --force --verbose
+
+# Preview before major sync
+python -m src.database.selective_sync --sync --dry-run
+```
+
+**Safety Features:**
+- Automatic backups for schema changes (timestamped)
+- Batch processing for large tables (10K rows per batch)
+- Excluded system/backup tables automatically
+- Comprehensive error handling and rollback capabilities
+
+#### Full Sync Tool (src/database/synchronise_databases.py)
+**For major schema changes** - Complete database replacement
+
+The full synchronization tool handles:
 - Alembic schema migrations
 - Complete data replacement (23.6M+ rows)
 - Sequence updates and foreign key constraints

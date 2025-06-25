@@ -17,8 +17,8 @@ from ..utils.database import get_db_manager, QueryExecutor, DatabaseManager
 router = APIRouter()
 
 
-@router.post("/player-stats", response_model=Union[PlayerStatsResponse, StatisticalAnalysis])
-async def query_player_stats(
+@router.get("/player-stats", response_model=PlayerStatsResponse)
+async def get_player_stats(
     # Player filters
     player_id: Optional[Union[int, List[int]]] = Query(None, description="Single player or list of players"),
     player_name: Optional[str] = Query(None, description="Player name (partial match supported)"),
@@ -44,10 +44,8 @@ async def query_player_stats(
     limit: int = Query(100, le=10000),
     offset: int = Query(0, ge=0),
     
-    # Analysis flags
-    about: bool = Query(False, description="Include statistical summary (mean, median, std dev, etc.)"),
-    correlation: Optional[List[str]] = Query(None, description="Fields to calculate correlations for"),
-    regression: Optional[str] = Query(None, description="Regression analysis specification as JSON"),
+    # Simple analysis flag
+    include_summary: bool = Query(False, description="Include basic statistical summary"),
     
     db_manager: DatabaseManager = Depends(get_db_manager)
 ):
@@ -79,13 +77,13 @@ async def query_player_stats(
         
         # Determine fields to select
         default_fields = [
-            "pgs.player_id", "p.player_name", "pgs.team_id", "t.team_name",
-            "pgs.game_id", "eg.game_date", "pgs.season",
-            "pgs.points", "pgs.rebounds", "pgs.assists", "pgs.steals", "pgs.blocks",
+            "pgs.player_id", "p.player_name", "pgs.team_id", "t.full_name as team_name",
+            "pgs.game_id", "eg.game_date", "eg.season",
+            "pgs.points", "pgs.rebounds_total as rebounds", "pgs.assists", "pgs.steals", "pgs.blocks",
             "pgs.turnovers", "pgs.field_goals_made", "pgs.field_goals_attempted",
-            "pgs.three_point_made", "pgs.three_point_attempted",
+            "pgs.three_pointers_made as three_point_made", "pgs.three_pointers_attempted as three_point_attempted",
             "pgs.free_throws_made", "pgs.free_throws_attempted",
-            "pgs.minutes", "pgs.plus_minus"
+            "pgs.minutes_played as minutes", "pgs.plus_minus"
         ]
         
         select_fields = fields if fields else default_fields
@@ -133,46 +131,135 @@ async def query_player_stats(
             query_info=query_info
         )
         
-        # Perform statistical analysis if requested
-        if about or correlation or regression:
+        # Perform basic statistical summary if requested
+        if include_summary:
             # Execute query without pagination for analysis
             analysis_query = base_query.replace(f"LIMIT {limit} OFFSET {offset}", "")
             df = await query_executor.execute_for_analysis(analysis_query, params)
             
-            # Parse regression specification
-            regression_spec = None
-            if regression:
-                try:
-                    regression_spec = json.loads(regression)
-                except json.JSONDecodeError:
-                    raise HTTPException(status_code=400, detail="Invalid JSON format in regression parameter")
-            
-            # Determine fields for analysis
+            # Determine fields for basic summary
             numeric_fields = [
-                "points", "rebounds", "assists", "steals", "blocks", "turnovers",
-                "field_goals_made", "field_goals_attempted", "three_point_made", 
-                "three_point_attempted", "free_throws_made", "free_throws_attempted",
-                "minutes", "plus_minus"
+                "points", "rebounds_total", "assists", "steals", "blocks", "turnovers",
+                "field_goals_made", "field_goals_attempted", "three_pointers_made", 
+                "three_pointers_attempted", "free_throws_made", "free_throws_attempted",
+                "minutes_played", "plus_minus"
             ]
             
-            about_fields = numeric_fields if about else None
-            
-            # Perform analysis
+            # Perform basic statistical summary
             analyzer = StatsAnalyzer()
             statistical_analysis = analyzer.analyze_dataframe(
-                df, about_fields, correlation, regression_spec
+                df, numeric_fields, None, None
             )
             
             response_data.statistical_analysis = statistical_analysis
-            
-            # Return statistical analysis if that's the primary request
-            if about or correlation or regression:
-                return statistical_analysis
         
         return response_data
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error executing player stats query: {str(e)}")
+
+
+@router.post("/player-stats/analyze", response_model=StatisticalAnalysis)
+async def analyze_player_stats(
+    # Player filters
+    player_id: Optional[Union[int, List[int]]] = Query(None, description="Single player or list of players"),
+    player_name: Optional[str] = Query(None, description="Player name (partial match supported)"),
+    
+    # Time filters
+    season: Optional[str] = Query(None, description="'latest', '2023-24', '2022-23,2023-24', or 'all'"),
+    game_id: Optional[str] = Query(None, description="'latest', specific game ID, comma-separated list, or 'all'"),
+    date_from: Optional[date] = Query(None, description="Start date for filtering"),
+    date_to: Optional[date] = Query(None, description="End date for filtering"),
+    
+    # Game context filters
+    team_id: Optional[int] = Query(None, description="Team ID"),
+    home_away: Optional[str] = Query(None, regex="^(home|away|all)$"),
+    opponent_team_id: Optional[int] = Query(None),
+    game_type: Optional[str] = Query(None, regex="^(regular|playoff|all)$"),
+    
+    # Statistical filters (JSON object)
+    filters: Optional[str] = Query(None, description="JSON object with column filters"),
+    
+    # Advanced analysis options
+    correlation: Optional[List[str]] = Query(None, description="Fields to calculate correlations for"),
+    regression: Optional[str] = Query(None, description="Regression analysis specification as JSON"),
+    include_summary: bool = Query(True, description="Include comprehensive statistical summary"),
+    
+    db_manager: DatabaseManager = Depends(get_db_manager)
+):
+    """
+    Perform advanced statistical analysis on player statistics.
+    Supports correlation analysis, regression modeling, and comprehensive summaries.
+    """
+    
+    try:
+        # Initialize query builder and executor
+        query_builder = PlayerQueryBuilder()
+        query_executor = QueryExecutor(db_manager)
+        
+        # Apply filters (same as basic query)
+        query_builder.add_season_filter(season)
+        query_builder.add_game_filter(game_id)
+        query_builder.add_date_filters(date_from, date_to)
+        query_builder.add_player_filters(player_id, player_name)
+        query_builder.add_team_filters(team_id, None, home_away, opponent_team_id)
+        query_builder.add_game_type_filter(game_type)
+        
+        # Parse and apply dynamic filters
+        if filters:
+            try:
+                filters_dict = json.loads(filters)
+                query_builder.add_dynamic_filters(filters_dict)
+            except json.JSONDecodeError:
+                raise HTTPException(status_code=400, detail="Invalid JSON format in filters parameter")
+        
+        # Build query for analysis
+        default_fields = [
+            "pgs.player_id", "p.player_name", "pgs.team_id", "t.full_name as team_name",
+            "pgs.game_id", "eg.game_date", "eg.season",
+            "pgs.points", "pgs.rebounds_total as rebounds", "pgs.assists", "pgs.steals", "pgs.blocks",
+            "pgs.turnovers", "pgs.field_goals_made", "pgs.field_goals_attempted",
+            "pgs.three_pointers_made as three_point_made", "pgs.three_pointers_attempted as three_point_attempted",
+            "pgs.free_throws_made", "pgs.free_throws_attempted",
+            "pgs.minutes_played as minutes", "pgs.plus_minus"
+        ]
+        
+        base_query, params = query_builder.build_query(default_fields)
+        
+        # Execute query for analysis (no pagination for analysis)
+        df = await query_executor.execute_for_analysis(base_query, params)
+        
+        if df.empty:
+            raise HTTPException(status_code=404, detail="No data found matching the specified criteria")
+        
+        # Parse regression specification
+        regression_spec = None
+        if regression:
+            try:
+                regression_spec = json.loads(regression)
+            except json.JSONDecodeError:
+                raise HTTPException(status_code=400, detail="Invalid JSON format in regression parameter")
+        
+        # Determine fields for analysis
+        numeric_fields = [
+            "points", "rebounds_total", "assists", "steals", "blocks", "turnovers",
+            "field_goals_made", "field_goals_attempted", "three_pointers_made", 
+            "three_pointers_attempted", "free_throws_made", "free_throws_attempted",
+            "minutes_played", "plus_minus"
+        ] if include_summary else None
+        
+        # Perform comprehensive analysis
+        analyzer = StatsAnalyzer()
+        statistical_analysis = analyzer.analyze_dataframe(
+            df, numeric_fields, correlation, regression_spec
+        )
+        
+        return statistical_analysis
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error performing player stats analysis: {str(e)}")
 
 
 @router.get("/players/{player_id}/stats")
@@ -202,13 +289,13 @@ async def get_player_stats_by_id(
         SELECT 
             pgs.*, 
             p.player_name,
-            t.team_name,
-            t.team_abbreviation,
+            t.full_name as team_name,
+            t.tricode as team_abbreviation,
             eg.game_date,
             eg.home_team_id,
             eg.away_team_id
         FROM player_game_stats pgs
-        JOIN players p ON pgs.player_id = p.player_id
+        JOIN players p ON pgs.player_id = p.id
         JOIN teams t ON pgs.team_id = t.team_id
         JOIN enhanced_games eg ON pgs.game_id = eg.game_id
         WHERE pgs.player_id = $1
@@ -223,11 +310,11 @@ async def get_player_stats_by_id(
                 latest_season = await query_executor.get_latest_season()
                 if latest_season:
                     param_count += 1
-                    query += f" AND pgs.season = ${param_count}"
+                    query += f" AND eg.season = ${param_count}"
                     params.append(latest_season)
             else:
                 param_count += 1
-                query += f" AND pgs.season = ${param_count}"
+                query += f" AND eg.season = ${param_count}"
                 params.append(season)
         
         # Add game type filter
@@ -276,7 +363,7 @@ async def search_players(
         query_executor = QueryExecutor(db_manager)
         
         search_query = """
-        SELECT player_id, player_name, first_name, last_name, team_id
+        SELECT id as player_id, player_name, first_name, last_name, team_id
         FROM players
         WHERE player_name ILIKE $1
            OR first_name ILIKE $1

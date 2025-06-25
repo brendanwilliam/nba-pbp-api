@@ -183,7 +183,7 @@ class QueryExecutor:
     
     async def validate_player_exists(self, player_id: int) -> bool:
         """Validate that a player exists in the database"""
-        query = "SELECT EXISTS(SELECT 1 FROM players WHERE player_id = $1)"
+        query = "SELECT EXISTS(SELECT 1 FROM players WHERE id = $1)"
         return await self.db_manager.execute_scalar(query, player_id)
     
     async def validate_team_exists(self, team_id: int) -> bool:
@@ -211,19 +211,36 @@ class QueryExecutor:
     async def get_player_info(self, player_id: int) -> Optional[Dict[str, Any]]:
         """Get basic player information"""
         query = """
-        SELECT player_id, player_name, first_name, last_name, team_id
+        SELECT id as player_id, player_name, first_name, last_name, team_id
         FROM players 
-        WHERE player_id = $1
+        WHERE id = $1
         """
         results = await self.db_manager.execute_query(query, player_id)
         return results[0] if results else None
     
-    async def get_team_info(self, team_id: int) -> Optional[Dict[str, Any]]:
-        """Get basic team information"""
-        query = """
-        SELECT team_id, team_name, team_abbreviation, team_city
-        FROM teams 
-        WHERE team_id = $1
-        """
-        results = await self.db_manager.execute_query(query, team_id)
+    async def get_team_info(self, team_id: int, season: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Get team information, optionally for a specific season"""
+        if season:
+            # Get team info for specific season
+            query = """
+            SELECT team_id, full_name as team_name, tricode as team_abbreviation, 
+                   city as team_city, first_season, last_season, is_active
+            FROM teams 
+            WHERE team_id = $1 
+              AND (first_season <= $2 AND (last_season >= $2 OR last_season IS NULL))
+            ORDER BY first_season DESC
+            LIMIT 1
+            """
+            results = await self.db_manager.execute_query(query, team_id, season)
+        else:
+            # Get current active team info
+            query = """
+            SELECT team_id, full_name as team_name, tricode as team_abbreviation, 
+                   city as team_city, first_season, last_season, is_active
+            FROM teams 
+            WHERE team_id = $1 AND is_active = true
+            LIMIT 1
+            """
+            results = await self.db_manager.execute_query(query, team_id)
+        
         return results[0] if results else None

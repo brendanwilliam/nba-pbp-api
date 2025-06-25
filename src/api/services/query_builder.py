@@ -28,20 +28,25 @@ class QueryBuilder:
         if not season:
             return
             
+        # Determine the correct table alias for season column
+        season_column = "eg.season"  # Default to enhanced_games
+        if self.base_table.startswith("enhanced_games"):
+            season_column = f"{self.base_table.split()[0]}.season"
+            
         if season == "latest":
             # Get most recent season from database
             subquery = "SELECT MAX(season) FROM enhanced_games"
-            self.where_conditions.append(f"{self.base_table}.season = ({subquery})")
+            self.where_conditions.append(f"{season_column} = ({subquery})")
         elif season == "all":
             pass  # No filter
         elif "," in season:
             seasons = [s.strip() for s in season.split(",")]
             param_name = self._get_param_name()
-            self.where_conditions.append(f"{self.base_table}.season = ANY(${len(self.parameters) + 1})")
+            self.where_conditions.append(f"{season_column} = ANY(${len(self.parameters) + 1})")
             self.parameters[param_name] = seasons
         else:
             param_name = self._get_param_name()
-            self.where_conditions.append(f"{self.base_table}.season = ${len(self.parameters) + 1}")
+            self.where_conditions.append(f"{season_column} = ${len(self.parameters) + 1}")
             self.parameters[param_name] = season
     
     def add_game_filter(self, game_id: str) -> None:
@@ -49,64 +54,77 @@ class QueryBuilder:
         if not game_id:
             return
             
+        # Determine the correct table alias for game columns
+        game_date_column = "eg.game_date"  # Default to enhanced_games
+        game_id_column = f"{self.base_table.split()[0]}.game_id"  # Base table has game_id
+        
         if game_id == "latest":
             # Get most recent game date
             subquery = "SELECT MAX(game_date) FROM enhanced_games"
-            self.where_conditions.append(f"{self.base_table}.game_date = ({subquery})")
+            self.where_conditions.append(f"{game_date_column} = ({subquery})")
         elif game_id == "all":
             pass
         elif "," in game_id:
             game_ids = [g.strip() for g in game_id.split(",")]
             param_name = self._get_param_name()
-            self.where_conditions.append(f"{self.base_table}.game_id = ANY(${len(self.parameters) + 1})")
+            self.where_conditions.append(f"{game_id_column} = ANY(${len(self.parameters) + 1})")
             self.parameters[param_name] = game_ids
         else:
             param_name = self._get_param_name()
-            self.where_conditions.append(f"{self.base_table}.game_id = ${len(self.parameters) + 1}")
+            self.where_conditions.append(f"{game_id_column} = ${len(self.parameters) + 1}")
             self.parameters[param_name] = game_id
     
     def add_date_filters(self, date_from=None, date_to=None) -> None:
         """Add date range filters"""
+        # Date filters always use enhanced_games table
+        game_date_column = "eg.game_date"
+        
         if date_from:
             param_name = self._get_param_name()
-            self.where_conditions.append(f"{self.base_table}.game_date >= ${len(self.parameters) + 1}")
+            self.where_conditions.append(f"{game_date_column} >= ${len(self.parameters) + 1}")
             self.parameters[param_name] = date_from
         
         if date_to:
             param_name = self._get_param_name()
-            self.where_conditions.append(f"{self.base_table}.game_date <= ${len(self.parameters) + 1}")
+            self.where_conditions.append(f"{game_date_column} <= ${len(self.parameters) + 1}")
             self.parameters[param_name] = date_to
     
     def add_player_filters(self, player_id=None, player_name=None) -> None:
         """Add player-specific filters"""
+        # Get the correct table alias
+        base_table_alias = self.base_table.split()[1] if len(self.base_table.split()) > 1 else self.base_table.split()[0]
+        
         if player_id:
             if isinstance(player_id, list):
                 param_name = self._get_param_name()
-                self.where_conditions.append(f"{self.base_table}.player_id = ANY(${len(self.parameters) + 1})")
+                self.where_conditions.append(f"{base_table_alias}.player_id = ANY(${len(self.parameters) + 1})")
                 self.parameters[param_name] = player_id
             else:
                 param_name = self._get_param_name()
-                self.where_conditions.append(f"{self.base_table}.player_id = ${len(self.parameters) + 1}")
+                self.where_conditions.append(f"{base_table_alias}.player_id = ${len(self.parameters) + 1}")
                 self.parameters[param_name] = player_id
         
         if player_name:
             # Add join to players table if needed
             if "players p" not in " ".join(self.joins):
-                self.joins.append(f"JOIN players p ON {self.base_table}.player_id = p.player_id")
+                self.joins.append(f"JOIN players p ON {base_table_alias}.player_id = p.id")
             param_name = self._get_param_name()
             self.where_conditions.append(f"p.player_name ILIKE ${len(self.parameters) + 1}")
             self.parameters[param_name] = f"%{player_name}%"
     
     def add_team_filters(self, team_id=None, team_name=None, home_away=None, opponent_team_id=None) -> None:
         """Add team-specific filters"""
+        # Get the correct table alias
+        base_table_alias = self.base_table.split()[1] if len(self.base_table.split()) > 1 else self.base_table.split()[0]
+        
         if team_id:
             if isinstance(team_id, list):
                 param_name = self._get_param_name()
-                self.where_conditions.append(f"{self.base_table}.team_id = ANY(${len(self.parameters) + 1})")
+                self.where_conditions.append(f"{base_table_alias}.team_id = ANY(${len(self.parameters) + 1})")
                 self.parameters[param_name] = team_id
             else:
                 param_name = self._get_param_name()
-                self.where_conditions.append(f"{self.base_table}.team_id = ${len(self.parameters) + 1}")
+                self.where_conditions.append(f"{base_table_alias}.team_id = ${len(self.parameters) + 1}")
                 self.parameters[param_name] = team_id
         
         if team_name:
@@ -115,7 +133,7 @@ class QueryBuilder:
                 team_names = [t.strip() for t in team_name.split(",")]
                 # Add join to teams table if needed
                 if "teams t" not in " ".join(self.joins):
-                    self.joins.append(f"JOIN teams t ON {self.base_table}.team_id = t.team_id")
+                    self.joins.append(f"JOIN teams t ON {base_table_alias}.team_id = t.team_id")
                 param_name = self._get_param_name()
                 name_conditions = []
                 for name in team_names:
@@ -126,34 +144,44 @@ class QueryBuilder:
             else:
                 # Add join to teams table if needed
                 if "teams t" not in " ".join(self.joins):
-                    self.joins.append(f"JOIN teams t ON {self.base_table}.team_id = t.team_id")
+                    self.joins.append(f"JOIN teams t ON {base_table_alias}.team_id = t.team_id")
                 param_name = self._get_param_name()
-                self.where_conditions.append(f"(t.team_name ILIKE ${len(self.parameters) + 1} OR t.team_abbreviation ILIKE ${len(self.parameters) + 1})")
+                self.where_conditions.append(f"(t.full_name ILIKE ${len(self.parameters) + 1} OR t.tricode ILIKE ${len(self.parameters) + 1})")
                 self.parameters[param_name] = f"%{team_name}%"
         
         if home_away and home_away != "all":
-            param_name = self._get_param_name()
-            self.where_conditions.append(f"{self.base_table}.home_away = ${len(self.parameters) + 1}")
-            self.parameters[param_name] = home_away
+            # Determine home/away status from enhanced_games table
+            base_table_alias = self.base_table.split()[1] if len(self.base_table.split()) > 1 else self.base_table.split()[0]
+            if home_away == "home":
+                self.where_conditions.append(f"{base_table_alias}.team_id = eg.home_team_id")
+            elif home_away == "away":
+                self.where_conditions.append(f"{base_table_alias}.team_id = eg.away_team_id")
         
         if opponent_team_id:
+            # Determine opponent team by checking if it's home or away opponent
+            base_table_alias = self.base_table.split()[1] if len(self.base_table.split()) > 1 else self.base_table.split()[0]
             param_name = self._get_param_name()
-            self.where_conditions.append(f"{self.base_table}.opponent_team_id = ${len(self.parameters) + 1}")
+            self.where_conditions.append(f"""
+                (({base_table_alias}.team_id = eg.home_team_id AND eg.away_team_id = ${len(self.parameters) + 1}) OR 
+                 ({base_table_alias}.team_id = eg.away_team_id AND eg.home_team_id = ${len(self.parameters) + 1}))
+            """)
             self.parameters[param_name] = opponent_team_id
     
     def add_game_type_filter(self, game_type: str) -> None:
         """Add game type filter (regular/playoff)"""
         if game_type and game_type != "all":
+            # Game type is in enhanced_games table
             param_name = self._get_param_name()
-            self.where_conditions.append(f"{self.base_table}.game_type = ${len(self.parameters) + 1}")
+            self.where_conditions.append(f"eg.game_type = ${len(self.parameters) + 1}")
             self.parameters[param_name] = game_type
     
     def add_win_loss_filter(self, win_loss: str) -> None:
         """Add win/loss filter for team queries"""
         if win_loss and win_loss != "all":
-            param_name = self._get_param_name()
-            self.where_conditions.append(f"{self.base_table}.win_loss = ${len(self.parameters) + 1}")
-            self.parameters[param_name] = win_loss
+            if win_loss.lower() == "win" or win_loss.upper() == "W":
+                self.where_conditions.append(f"{self.base_table}.wins > {self.base_table}.losses")
+            elif win_loss.lower() == "loss" or win_loss.upper() == "L":
+                self.where_conditions.append(f"{self.base_table}.wins < {self.base_table}.losses")
     
     def add_dynamic_filters(self, filters: Dict[str, Any]) -> None:
         """Add dynamic filters from JSON object like {'points': {'gte': 20}, 'assists': {'gte': 5}}"""
@@ -294,7 +322,7 @@ class PlayerQueryBuilder(QueryBuilder):
         # Add common joins for player queries
         self.joins.extend([
             "JOIN enhanced_games eg ON pgs.game_id = eg.game_id",
-            "JOIN players p ON pgs.player_id = p.player_id",
+            "JOIN players p ON pgs.player_id = p.id",
             "JOIN teams t ON pgs.team_id = t.team_id"
         ])
 
@@ -331,7 +359,7 @@ class ShotQueryBuilder(QueryBuilder):
         # Add common joins for shot queries
         self.joins.extend([
             "JOIN enhanced_games eg ON pe.game_id = eg.game_id",
-            "JOIN players p ON pe.player_id = p.player_id",
+            "JOIN players p ON pe.player_id = p.id",
             "JOIN teams t ON pe.team_id = t.team_id"
         ])
         # Add shot-specific conditions
@@ -349,7 +377,7 @@ class PlayByPlayQueryBuilder(QueryBuilder):
         ])
         # Add optional joins that can be enabled based on query needs
         self.optional_joins = {
-            "players": "LEFT JOIN players p ON pe.player_id = p.player_id",
+            "players": "LEFT JOIN players p ON pe.player_id = p.id",
             "teams": "LEFT JOIN teams t ON pe.team_id = t.team_id"
         }
     

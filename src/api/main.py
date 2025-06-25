@@ -3,7 +3,7 @@ NBA Play-by-Play API
 Main FastAPI application for serving NBA game data and analytics.
 """
 
-from fastapi import FastAPI, Depends, HTTPException, Query
+from fastapi import FastAPI, Depends, HTTPException, Query, Response
 from fastapi.security import HTTPBearer
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
@@ -65,8 +65,10 @@ async def shutdown_event():
 
 # Health check endpoint
 @app.get("/health")
-async def health_check():
+async def health_check(response: Response):
     """Basic health check endpoint"""
+    # Add caching headers for health check (5 minutes)
+    response.headers["Cache-Control"] = "public, max-age=300"
     return {
         "status": "healthy", 
         "timestamp": datetime.utcnow(),
@@ -84,6 +86,12 @@ async def metrics():
         # TODO: Add actual metrics when implemented
         "placeholder": "Metrics will be implemented with Redis/Prometheus"
     }
+
+# Favicon endpoint to prevent 404s in browser logs
+@app.get("/favicon.ico")
+async def favicon():
+    """Return 204 No Content for favicon requests"""
+    return Response(status_code=204)
 
 # Root endpoint
 @app.get("/")
