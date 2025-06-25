@@ -30,10 +30,15 @@ python -m src.scripts.populate_enhanced_schema --backfill --limit 100
 # View database statistics (recommended for monitoring progress)
 python -m src.database.database_stats
 
+# RECOMMENDED: Selective database synchronization (efficient, safe)
+python -m src.database.selective_sync --analyze --ignore-size    # Check differences
+python -m src.database.selective_sync --sync --dry-run --ignore-size  # Preview sync
+python -m src.database.selective_sync --sync --ignore-size       # Auto-sync all changes
+
 # Compare local and cloud databases for differences
 python -m src.database.database_comparison
 
-# Synchronize local database changes to cloud (DANGEROUS - overwrites cloud data)
+# Full database synchronization (for major schema changes only)
 python -m src.database.synchronise_databases --dry-run  # Preview changes first
 python -m src.database.synchronise_databases            # Full sync (with confirmation)
 
@@ -138,6 +143,9 @@ The project follows a modular architecture:
   - `queue_schema.sql`: Enhanced scraping queue structure
   - `queue_manager.py`: Queue operations and status tracking
   - `database_stats.py`: Comprehensive database statistics and monitoring tool
+  - `selective_sync.py`: **NEW** - Efficient table-by-table database synchronization
+  - `synchronise_databases.py`: Full database replacement synchronization
+  - `database_comparison.py`: Comprehensive database difference analysis
 
 - **src/scripts/**: Execution scripts and utilities
   - `build_game_url_queue.py`: Main script for URL queue generation
@@ -146,6 +154,23 @@ The project follows a modular architecture:
 
 - **src/api/**: RESTful API endpoints (planned)
 - **src/analytics/**: Data analysis and insights (planned)
+
+## Documentation
+
+### Comprehensive Guides
+- **[Database Management Guide](docs/database-management.md)** - Complete documentation for database synchronization tools
+  - Selective sync tool usage and best practices
+  - Full synchronization workflows
+  - Safety procedures and troubleshooting
+  - Development workflows and automation
+
+### API Documentation
+- **[API Health Check Guide](instructions/API-health-check.md)** - Comprehensive API testing procedures
+- API endpoints documentation (available at `/docs` when running)
+
+### Development Guides
+- **[CLAUDE.md](CLAUDE.md)** - Complete project guidance for AI assistants
+- Individual instruction files in `instructions/` directory
 
 ## Current Status
 
@@ -437,6 +462,197 @@ We will use a PostgreSQL database to store the scraped data locally. Once we scr
 
 ## API
 The API will be used to query the database for specific play-by-play data. The goal is that we can query the API for plays by team, player, game, game time, date, shot clock, score difference, score totals, etc. All of this data is present in the JSON at `#__NEXT_DATA__` and more specifically play-by-play events.
+
+## API Testing & Usage
+
+### Starting the API Server
+
+Before testing the API, start the server from the project root:
+
+```bash
+# Activate virtual environment first
+source venv/bin/activate
+
+# Start the API server with correct Python path
+PYTHONPATH=/Users/brendan/nba-pbp-api python src/api/start_api.py
+```
+
+The API will be available at:
+- **Main API**: http://localhost:8000
+- **Interactive Documentation**: http://localhost:8000/docs  
+- **Alternative Documentation**: http://localhost:8000/redoc
+- **Health Check**: http://localhost:8000/health
+
+### Working Endpoints
+
+#### 1. Health Check
+```bash
+curl http://localhost:8000/health
+```
+**Response:**
+```json
+{
+  "status": "healthy",
+  "timestamp": "2025-06-24T04:23:14.982451",
+  "service": "NBA Play-by-Play API", 
+  "version": "1.0.0"
+}
+```
+
+#### 2. System Metrics
+```bash
+curl http://localhost:8000/metrics
+```
+**Response:**
+```json
+{
+  "status": "operational",
+  "timestamp": "2025-06-24T04:23:24.281649",
+  "placeholder": "Metrics will be implemented with Redis/Prometheus"
+}
+```
+
+#### 3. Available API Endpoints
+The API provides these endpoints (from OpenAPI schema):
+- `GET /health` - Health check
+- `GET /metrics` - System metrics
+- `GET /api/v1/players/search` - Player search
+- `GET /api/v1/teams/search` - Team search  
+- `POST /api/v1/player-stats` - Advanced player statistics
+- `GET /api/v1/players/{player_id}/stats` - Individual player stats
+- `POST /api/v1/team-stats` - Advanced team statistics
+- `GET /api/v1/teams/{team_id}/stats` - Individual team stats
+- `GET /api/v1/teams/{team_id}/head-to-head/{opponent_team_id}` - Team comparisons
+- `POST /api/v1/lineup-stats` - Lineup analysis
+- `GET /api/v1/lineups/common/{team_id}` - Common lineups
+- `GET /api/v1/lineups/player-combinations` - Player combination analysis
+
+### Current Database Schema
+
+The database contains these key tables with the following structure:
+
+#### Players Table
+- `id` (integer) - Primary key
+- `nba_id` (varchar) - NBA official player ID
+- `player_name` (varchar) - Full player name
+- `first_name`, `last_name` (varchar) - Name components
+- `position` (varchar) - Playing position
+- `jersey_number` (varchar) - Jersey number
+- `team_id` (integer) - Current team ID
+
+#### Teams Table  
+- `id` (integer) - Primary key
+- `tricode` (varchar) - Team abbreviation (e.g., 'LAL', 'BOS')
+- `full_name` (varchar) - Full team name
+- `nba_team_id` (varchar) - NBA official team ID
+- `conference`, `division` (varchar) - League organization
+- `arena` (varchar) - Home arena name
+
+#### Player Game Stats Table
+Key statistical columns:
+- `player_id`, `game_id`, `team_id` - Identifiers
+- `points`, `assists`, `rebounds_total` - Basic stats
+- `field_goals_made/attempted`, `three_pointers_made/attempted` - Shooting
+- `free_throws_made/attempted` - Free throws
+- `steals`, `blocks`, `turnovers`, `fouls_personal` - Other stats
+- `minutes_played`, `plus_minus` - Advanced metrics
+
+### Sample Data Queries
+
+#### Database Statistics
+Current database contains:
+- **1,000,298 player game stat records**
+- **3,787 unique players**
+- **36,304 games with JSON data**
+- **17,398,392 play-by-play events**
+
+#### Sample Player Data
+```bash
+# Query database directly to see sample data
+PYTHONPATH=/Users/brendan/nba-pbp-api python -c "
+import psycopg2
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+conn = psycopg2.connect(os.getenv('DATABASE_URL', 'postgresql://localhost:5432/nba_pbp'))
+cur = conn.cursor()
+
+# Get high-scoring games
+cur.execute('SELECT p.player_name, pgs.points, pgs.assists, pgs.rebounds_total, pgs.game_id FROM player_game_stats pgs JOIN players p ON p.id = pgs.player_id WHERE pgs.points >= 40 ORDER BY pgs.points DESC LIMIT 5')
+for row in cur.fetchall():
+    print(f'{row[0]}: {row[1]} pts, {row[2]} ast, {row[3]} reb (Game {row[4]})')
+conn.close()
+"
+```
+
+### Known Issues (Development Status)
+
+⚠️ **Current API Issues:**
+1. **Player/Team Search Endpoints**: Database schema mismatch - looking for columns that don't exist
+2. **Statistics Endpoints**: SQL query errors due to incorrect table aliases
+3. **Column Name Mismatches**: API expects different column names than database schema
+
+**Error Examples:**
+```bash
+# These currently return errors:
+curl "http://localhost:8000/api/v1/players/search?query=LeBron"
+# Error: column "player_id" does not exist
+
+curl -X POST "http://localhost:8000/api/v1/player-stats" \
+  -H "Content-Type: application/json" \
+  -d '{"season": "latest", "limit": 5}'
+# Error: column p.player_id does not exist
+```
+
+### Manual Database Testing
+
+While the API endpoints are being fixed, you can query the database directly:
+
+```bash
+# Activate environment and test database queries
+source venv/bin/activate
+PYTHONPATH=/Users/brendan/nba-pbp-api python -c "
+import psycopg2
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+conn = psycopg2.connect(os.getenv('DATABASE_URL'))
+cur = conn.cursor()
+
+# Find top scorers
+print('Top single-game performances:')
+cur.execute('''
+    SELECT p.player_name, pgs.points, pgs.game_id 
+    FROM player_game_stats pgs 
+    JOIN players p ON p.id = pgs.player_id 
+    WHERE pgs.points >= 50 
+    ORDER BY pgs.points DESC 
+    LIMIT 10
+''')
+for row in cur.fetchall():
+    print(f'  {row[0]}: {row[1]} points (Game {row[2]})')
+
+conn.close()
+"
+```
+
+### Development Roadmap
+
+1. **Fix API Schema Issues** - Update SQL queries to match actual database schema
+2. **Implement Search Functionality** - Fix player/team search endpoints  
+3. **Add Advanced Filtering** - Enable complex statistical queries
+4. **Performance Optimization** - Add database indexing for common queries
+5. **Authentication & Rate Limiting** - Secure the API for production use
+
+### Interactive API Documentation
+
+Once the API issues are resolved, use the interactive documentation:
+- **Swagger UI**: http://localhost:8000/docs
+- **ReDoc**: http://localhost:8000/redoc
+
+These provide a web interface to test all endpoints with real-time validation and examples.
 
 ## MCP
 In addition to the API, we will also create a MCP server to serve users play-by-play data when they are working with a LLM. The MCP server will take in natural language queries and return play-by-play data in a format that is easy for the LLM to understand.

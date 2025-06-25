@@ -217,12 +217,20 @@ class EnhancedSchemaPopulator:
         # Extract or derive season
         season = game.get('season')
         if not season:
-            # Try to derive from game_id (format: 0020300999 = 2003-04 season)
+            # Try to derive from game_id (format: 0021700001 = 2017-18 season)
             game_id = game.get('gameId', '')
             if game_id and len(game_id) >= 5:
                 try:
-                    year = int(game_id[1:5])  # Extract year from game_id (2003)
-                    season = f"{year}-{str(year+1)[2:]}"  # Convert to season format (e.g., "2003-04")
+                    year_code = int(game_id[3:5])  # Extract 2-digit year code from positions 3-4
+                    
+                    # Convert 2-digit year to 4-digit year
+                    if year_code >= 96:  # 1996-97 season onwards (96, 97, 98, 99)
+                        start_year = 1900 + year_code
+                    else:  # 00-99 maps to 2000-2099
+                        start_year = 2000 + year_code
+                        
+                    end_year = start_year + 1
+                    season = f"{start_year}-{str(end_year)[2:]}"  # Convert to season format (e.g., "2017-18")
                 except (ValueError, IndexError):
                     season = None
             
