@@ -325,6 +325,8 @@ class PlayerQueryBuilder(QueryBuilder):
             "JOIN players p ON pgs.player_id = p.id",
             "JOIN teams t ON pgs.team_id = t.team_id"
         ])
+        # Only count games where player actually played (minutes > 0)
+        self.where_conditions.append("pgs.minutes_played > 0")
 
 
 class TeamQueryBuilder(QueryBuilder):
