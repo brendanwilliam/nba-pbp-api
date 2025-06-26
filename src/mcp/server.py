@@ -487,25 +487,25 @@ class NBAMCPServer:
                 
         elif stat_type == "advanced":
             # Advanced stats
-            if 'points_per_game' in player_data:
+            if 'points_per_game' in player_data and player_data['points_per_game'] is not None:
                 response += f"• Points per Game: {player_data['points_per_game']:.1f}\n"
-            if 'rebounds_per_game' in player_data:
+            if 'rebounds_per_game' in player_data and player_data['rebounds_per_game'] is not None:
                 response += f"• Rebounds per Game: {player_data['rebounds_per_game']:.1f}\n"
-            if 'assists_per_game' in player_data:
+            if 'assists_per_game' in player_data and player_data['assists_per_game'] is not None:
                 response += f"• Assists per Game: {player_data['assists_per_game']:.1f}\n"
-            if 'steals_per_game' in player_data:
+            if 'steals_per_game' in player_data and player_data['steals_per_game'] is not None:
                 response += f"• Steals per Game: {player_data['steals_per_game']:.1f}\n"
-            if 'blocks_per_game' in player_data:
+            if 'blocks_per_game' in player_data and player_data['blocks_per_game'] is not None:
                 response += f"• Blocks per Game: {player_data['blocks_per_game']:.1f}\n"
-            if 'turnovers_per_game' in player_data:
+            if 'turnovers_per_game' in player_data and player_data['turnovers_per_game'] is not None:
                 response += f"• Turnovers per Game: {player_data['turnovers_per_game']:.1f}\n"
-            if 'fouls_per_game' in player_data:
+            if 'fouls_per_game' in player_data and player_data['fouls_per_game'] is not None:
                 response += f"• Fouls per Game: {player_data['fouls_per_game']:.1f}\n"
-            if 'plus_minus_per_game' in player_data:
+            if 'plus_minus_per_game' in player_data and player_data['plus_minus_per_game'] is not None:
                 response += f"• Plus/Minus per Game: {player_data['plus_minus_per_game']:.1f}\n"
-            if 'minutes_per_game' in player_data:
+            if 'minutes_per_game' in player_data and player_data['minutes_per_game'] is not None:
                 response += f"• Minutes per Game: {player_data['minutes_per_game']:.1f}\n"
-            if 'efficiency_rating' in player_data:
+            if 'efficiency_rating' in player_data and player_data['efficiency_rating'] is not None:
                 response += f"• Efficiency Rating: {player_data['efficiency_rating']:.1f}\n"
             
             # Shooting percentages for context
@@ -630,14 +630,14 @@ class NBAMCPServer:
             ROUND(AVG(pgs.steals)::numeric, 1) as steals_per_game,
             ROUND(AVG(pgs.blocks)::numeric, 1) as blocks_per_game,
             ROUND(AVG(pgs.turnovers)::numeric, 1) as turnovers_per_game,
-            ROUND(AVG(pgs.personal_fouls)::numeric, 1) as fouls_per_game,
+            ROUND(AVG(pgs.fouls_personal)::numeric, 1) as fouls_per_game,
             ROUND(AVG(pgs.plus_minus)::numeric, 1) as plus_minus_per_game,
             ROUND(AVG(pgs.minutes_played)::numeric, 1) as minutes_per_game,
             ROUND(AVG(CASE WHEN pgs.field_goals_attempted > 0 THEN pgs.field_goals_made::float / pgs.field_goals_attempted END)::numeric, 3) as field_goal_percentage,
             ROUND(AVG(CASE WHEN pgs.three_pointers_attempted > 0 THEN pgs.three_pointers_made::float / pgs.three_pointers_attempted END)::numeric, 3) as three_point_percentage,
             ROUND(AVG(CASE WHEN pgs.free_throws_attempted > 0 THEN pgs.free_throws_made::float / pgs.free_throws_attempted END)::numeric, 3) as free_throw_percentage,
             -- Simple efficiency calculation
-            ROUND(AVG((pgs.points + pgs.rebounds_total + pgs.assists + pgs.steals + pgs.blocks - pgs.turnovers - pgs.personal_fouls))::numeric, 1) as efficiency_rating
+            ROUND(AVG((pgs.points + pgs.rebounds_total + pgs.assists + pgs.steals + pgs.blocks - pgs.turnovers - pgs.fouls_personal))::numeric, 1) as efficiency_rating
         FROM player_game_stats pgs
         JOIN players p ON pgs.player_id = p.id
         JOIN enhanced_games g ON pgs.game_id = g.game_id
