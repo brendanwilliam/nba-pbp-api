@@ -455,7 +455,7 @@ class LineupQueryBuilder(QueryBuilder):
         # Add common joins for lineup queries
         self.joins.extend([
             "JOIN enhanced_games eg ON ls.game_id = eg.game_id",
-            "JOIN teams t ON ls.team_id = t.team_id"
+            "JOIN teams t ON ls.team_id = t.id"
         ])
 
 
@@ -468,7 +468,7 @@ class ShotQueryBuilder(QueryBuilder):
         self.joins.extend([
             "JOIN enhanced_games eg ON pe.game_id = eg.game_id",
             "JOIN players p ON pe.player_id = p.id",
-            "JOIN teams t ON pe.team_id = t.team_id"
+            "JOIN teams t ON pe.team_id = t.id"
         ])
         # Add shot-specific conditions
         self.where_conditions.append("pe.event_type IN ('Made Shot', 'Missed Shot')")
@@ -486,7 +486,7 @@ class PlayByPlayQueryBuilder(QueryBuilder):
         # Add optional joins that can be enabled based on query needs
         self.optional_joins = {
             "players": "LEFT JOIN players p ON pe.player_id = p.id",
-            "teams": "LEFT JOIN teams t ON pe.team_id = t.team_id"
+            "teams": "LEFT JOIN teams t ON pe.team_id = t.id"
         }
     
     def add_optional_join(self, join_type: str):

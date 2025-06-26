@@ -280,7 +280,7 @@ class NBAMCPServer:
             processed_query = await self.query_processor.process_query_context(context)
             
             # Execute the query
-            result = await self.db_manager.execute_query(processed_query.sql, processed_query.params)
+            result = await self.db_manager.execute_query(processed_query.sql, *processed_query.params)
             
             # Format and return results
             if not result:
@@ -315,7 +315,7 @@ class NBAMCPServer:
             )
             
             # Execute query
-            result = await self.db_manager.execute_query(query, params)
+            result = await self.db_manager.execute_query(query, *params)
             
             if not result:
                 return [TextContent(
@@ -352,7 +352,7 @@ class NBAMCPServer:
             WHERE g.game_id = $1
             """
             
-            result = await self.db_manager.execute_query(query, [game_id])
+            result = await self.db_manager.execute_query(query, game_id)
             
             if not result:
                 return [TextContent(
@@ -385,7 +385,7 @@ class NBAMCPServer:
                     player_name=player_name,
                     season=season
                 )
-                result = await self.db_manager.execute_query(query, params)
+                result = await self.db_manager.execute_query(query, *params)
                 
                 if result:
                     comparison_data.append(result[0])
@@ -418,7 +418,7 @@ class NBAMCPServer:
                 season=season
             )
             
-            result = await self.db_manager.execute_query(query, params)
+            result = await self.db_manager.execute_query(query, *params)
             
             if not result:
                 return [TextContent(
@@ -436,6 +436,80 @@ class NBAMCPServer:
                 type="text",
                 text=f"Error analyzing team {team_name}: {str(e)}"
             )]
+    
+    def _format_player_stats_response(self, player_data: Dict, season: Optional[str] = None) -> str:
+        """Format player statistics response for direct queries."""
+        response = f"**{player_data.get('player_name', 'Unknown Player')} Statistics**\n\n"
+        
+        if season:
+            response += f"Season: {season}\n"
+        
+        response += f"• Games Played: {player_data.get('games_played', 'N/A')}\n"
+        
+        if 'points_per_game' in player_data:
+            response += f"• Points per Game: {player_data['points_per_game']:.1f}\n"
+        if 'rebounds_per_game' in player_data:
+            response += f"• Rebounds per Game: {player_data['rebounds_per_game']:.1f}\n"
+        if 'assists_per_game' in player_data:
+            response += f"• Assists per Game: {player_data['assists_per_game']:.1f}\n"
+        if 'steals_per_game' in player_data:
+            response += f"• Steals per Game: {player_data['steals_per_game']:.1f}\n"
+        if 'blocks_per_game' in player_data:
+            response += f"• Blocks per Game: {player_data['blocks_per_game']:.1f}\n"
+        if 'turnovers_per_game' in player_data:
+            response += f"• Turnovers per Game: {player_data['turnovers_per_game']:.1f}\n"
+        if 'field_goal_percentage' in player_data and player_data['field_goal_percentage']:
+            response += f"• Field Goal %: {player_data['field_goal_percentage']*100:.1f}%\n"
+        if 'three_point_percentage' in player_data and player_data['three_point_percentage']:
+            response += f"• Three Point %: {player_data['three_point_percentage']*100:.1f}%\n"
+        if 'free_throw_percentage' in player_data and player_data['free_throw_percentage']:
+            response += f"• Free Throw %: {player_data['free_throw_percentage']*100:.1f}%\n"
+        if 'minutes_per_game' in player_data:
+            response += f"• Minutes per Game: {player_data['minutes_per_game']:.1f}\n"
+        
+        # Add totals if available
+        if 'total_points' in player_data:
+            response += f"• Total Points: {player_data['total_points']:,}\n"
+        if 'total_rebounds' in player_data:
+            response += f"• Total Rebounds: {player_data['total_rebounds']:,}\n"
+        if 'total_assists' in player_data:
+            response += f"• Total Assists: {player_data['total_assists']:,}\n"
+        
+        return response
+    
+    def _format_game_analysis_response(self, game_data: Dict, analysis_type: str) -> str:
+        """Format game analysis response."""
+        response = f"**Game Analysis - {analysis_type.title()}**\n\n"
+        
+        response += f"Game ID: {game_data.get('game_id', 'Unknown')}\n"
+        response += f"Date: {game_data.get('game_date', 'Unknown')}\n"
+        response += f"Season: {game_data.get('season', 'Unknown')}\n"
+        response += f"Matchup: {game_data.get('away_team', 'Away')} @ {game_data.get('home_team', 'Home')}\n"
+        response += f"Final Score: {game_data.get('away_team', 'Away')} {game_data.get('away_score', '-')} - {game_data.get('home_score', '-')} {game_data.get('home_team', 'Home')}\n"
+        
+        return response
+    
+    def _format_team_analysis_response(self, team_data: Dict, analysis_type: str, season: Optional[str] = None) -> str:
+        """Format team analysis response."""
+        response = f"**{team_data.get('team_name', 'Unknown Team')} - {analysis_type.replace('_', ' ').title()}**\n\n"
+        
+        if season:
+            response += f"Season: {season}\n"
+        
+        if 'wins' in team_data and 'losses' in team_data:
+            response += f"• Record: {team_data['wins']}-{team_data['losses']}\n"
+        if 'games_played' in team_data:
+            response += f"• Games Played: {team_data['games_played']}\n"
+        if 'points_per_game' in team_data:
+            response += f"• Points per Game: {team_data['points_per_game']:.1f}\n"
+        if 'rebounds_per_game' in team_data:
+            response += f"• Rebounds per Game: {team_data['rebounds_per_game']:.1f}\n"
+        if 'assists_per_game' in team_data:
+            response += f"• Assists per Game: {team_data['assists_per_game']:.1f}\n"
+        if 'field_goal_percentage' in team_data and team_data['field_goal_percentage']:
+            response += f"• Field Goal %: {team_data['field_goal_percentage']*100:.1f}%\n"
+        
+        return response
     
     async def _format_query_results(self, results: List[Dict], processed_query, context: QueryContext) -> str:
         """Format query results based on query type and context."""
