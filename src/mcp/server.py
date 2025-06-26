@@ -7,7 +7,7 @@ Provides MCP tools for querying NBA play-by-play data using natural language.
 import asyncio
 import os
 import sys
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union, Tuple
 
 # Add parent directories to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -308,11 +308,16 @@ class NBAMCPServer:
         stat_type = arguments.get("stat_type", "basic")
         
         try:
-            # Build query using existing query builder
-            query, params = self.player_query_builder.build_basic_stats_query(
-                player_name=player_name,
-                season=season
-            )
+            # Build query based on stat_type
+            if stat_type == "shooting":
+                query, params = await self._build_shooting_stats_query(player_name, season)
+            elif stat_type == "advanced":
+                query, params = await self._build_advanced_stats_query(player_name, season)
+            else:  # basic
+                query, params = self.player_query_builder.build_basic_stats_query(
+                    player_name=player_name,
+                    season=season
+                )
             
             # Execute query
             result = await self.db_manager.execute_query(query, *params)
@@ -325,7 +330,7 @@ class NBAMCPServer:
             
             # Format response
             player_data = result[0]
-            response = self._format_player_stats_response(player_data, season)
+            response = self._format_player_stats_response(player_data, season, stat_type)
             
             return [TextContent(type="text", text=response)]
             
@@ -437,43 +442,110 @@ class NBAMCPServer:
                 text=f"Error analyzing team {team_name}: {str(e)}"
             )]
     
-    def _format_player_stats_response(self, player_data: Dict, season: Optional[str] = None) -> str:
+    def _format_player_stats_response(self, player_data: Dict, season: Optional[str] = None, stat_type: str = "basic") -> str:
         """Format player statistics response for direct queries."""
-        response = f"**{player_data.get('player_name', 'Unknown Player')} Statistics**\n\n"
+        stat_type_title = stat_type.title() if stat_type != "basic" else ""
+        response = f"**{player_data.get('player_name', 'Unknown Player')} {stat_type_title} Statistics**\n\n"
         
         if season:
             response += f"Season: {season}\n"
         
         response += f"• Games Played: {player_data.get('games_played', 'N/A')}\n"
         
-        if 'points_per_game' in player_data:
-            response += f"• Points per Game: {player_data['points_per_game']:.1f}\n"
-        if 'rebounds_per_game' in player_data:
-            response += f"• Rebounds per Game: {player_data['rebounds_per_game']:.1f}\n"
-        if 'assists_per_game' in player_data:
-            response += f"• Assists per Game: {player_data['assists_per_game']:.1f}\n"
-        if 'steals_per_game' in player_data:
-            response += f"• Steals per Game: {player_data['steals_per_game']:.1f}\n"
-        if 'blocks_per_game' in player_data:
-            response += f"• Blocks per Game: {player_data['blocks_per_game']:.1f}\n"
-        if 'turnovers_per_game' in player_data:
-            response += f"• Turnovers per Game: {player_data['turnovers_per_game']:.1f}\n"
-        if 'field_goal_percentage' in player_data and player_data['field_goal_percentage']:
-            response += f"• Field Goal %: {player_data['field_goal_percentage']*100:.1f}%\n"
-        if 'three_point_percentage' in player_data and player_data['three_point_percentage']:
-            response += f"• Three Point %: {player_data['three_point_percentage']*100:.1f}%\n"
-        if 'free_throw_percentage' in player_data and player_data['free_throw_percentage']:
-            response += f"• Free Throw %: {player_data['free_throw_percentage']*100:.1f}%\n"
-        if 'minutes_per_game' in player_data:
-            response += f"• Minutes per Game: {player_data['minutes_per_game']:.1f}\n"
-        
-        # Add totals if available
-        if 'total_points' in player_data:
-            response += f"• Total Points: {player_data['total_points']:,}\n"
-        if 'total_rebounds' in player_data:
-            response += f"• Total Rebounds: {player_data['total_rebounds']:,}\n"
-        if 'total_assists' in player_data:
-            response += f"• Total Assists: {player_data['total_assists']:,}\n"
+        if stat_type == "shooting":
+            # Shooting-specific stats
+            if 'field_goals_made_per_game' in player_data:
+                response += f"• Field Goals Made/Game: {player_data['field_goals_made_per_game']:.1f}\n"
+            if 'field_goals_attempted_per_game' in player_data:
+                response += f"• Field Goals Attempted/Game: {player_data['field_goals_attempted_per_game']:.1f}\n"
+            if 'field_goal_percentage' in player_data and player_data['field_goal_percentage']:
+                response += f"• Field Goal %: {player_data['field_goal_percentage']*100:.1f}%\n"
+            
+            if 'three_pointers_made_per_game' in player_data:
+                response += f"• 3-Pointers Made/Game: {player_data['three_pointers_made_per_game']:.1f}\n"
+            if 'three_pointers_attempted_per_game' in player_data:
+                response += f"• 3-Pointers Attempted/Game: {player_data['three_pointers_attempted_per_game']:.1f}\n"
+            if 'three_point_percentage' in player_data and player_data['three_point_percentage']:
+                response += f"• Three Point %: {player_data['three_point_percentage']*100:.1f}%\n"
+            
+            if 'free_throws_made_per_game' in player_data:
+                response += f"• Free Throws Made/Game: {player_data['free_throws_made_per_game']:.1f}\n"
+            if 'free_throws_attempted_per_game' in player_data:
+                response += f"• Free Throws Attempted/Game: {player_data['free_throws_attempted_per_game']:.1f}\n"
+            if 'free_throw_percentage' in player_data and player_data['free_throw_percentage']:
+                response += f"• Free Throw %: {player_data['free_throw_percentage']*100:.1f}%\n"
+            
+            # Season totals for shooting
+            if 'total_field_goals_made' in player_data:
+                response += f"• Total FG Made: {player_data['total_field_goals_made']:,}\n"
+            if 'total_field_goals_attempted' in player_data:
+                response += f"• Total FG Attempted: {player_data['total_field_goals_attempted']:,}\n"
+            if 'total_three_pointers_made' in player_data:
+                response += f"• Total 3PT Made: {player_data['total_three_pointers_made']:,}\n"
+            if 'total_three_pointers_attempted' in player_data:
+                response += f"• Total 3PT Attempted: {player_data['total_three_pointers_attempted']:,}\n"
+                
+        elif stat_type == "advanced":
+            # Advanced stats
+            if 'points_per_game' in player_data:
+                response += f"• Points per Game: {player_data['points_per_game']:.1f}\n"
+            if 'rebounds_per_game' in player_data:
+                response += f"• Rebounds per Game: {player_data['rebounds_per_game']:.1f}\n"
+            if 'assists_per_game' in player_data:
+                response += f"• Assists per Game: {player_data['assists_per_game']:.1f}\n"
+            if 'steals_per_game' in player_data:
+                response += f"• Steals per Game: {player_data['steals_per_game']:.1f}\n"
+            if 'blocks_per_game' in player_data:
+                response += f"• Blocks per Game: {player_data['blocks_per_game']:.1f}\n"
+            if 'turnovers_per_game' in player_data:
+                response += f"• Turnovers per Game: {player_data['turnovers_per_game']:.1f}\n"
+            if 'fouls_per_game' in player_data:
+                response += f"• Fouls per Game: {player_data['fouls_per_game']:.1f}\n"
+            if 'plus_minus_per_game' in player_data:
+                response += f"• Plus/Minus per Game: {player_data['plus_minus_per_game']:.1f}\n"
+            if 'minutes_per_game' in player_data:
+                response += f"• Minutes per Game: {player_data['minutes_per_game']:.1f}\n"
+            if 'efficiency_rating' in player_data:
+                response += f"• Efficiency Rating: {player_data['efficiency_rating']:.1f}\n"
+            
+            # Shooting percentages for context
+            if 'field_goal_percentage' in player_data and player_data['field_goal_percentage']:
+                response += f"• Field Goal %: {player_data['field_goal_percentage']*100:.1f}%\n"
+            if 'three_point_percentage' in player_data and player_data['three_point_percentage']:
+                response += f"• Three Point %: {player_data['three_point_percentage']*100:.1f}%\n"
+            if 'free_throw_percentage' in player_data and player_data['free_throw_percentage']:
+                response += f"• Free Throw %: {player_data['free_throw_percentage']*100:.1f}%\n"
+                
+        else:  # basic
+            # Basic stats
+            if 'points_per_game' in player_data:
+                response += f"• Points per Game: {player_data['points_per_game']:.1f}\n"
+            if 'rebounds_per_game' in player_data:
+                response += f"• Rebounds per Game: {player_data['rebounds_per_game']:.1f}\n"
+            if 'assists_per_game' in player_data:
+                response += f"• Assists per Game: {player_data['assists_per_game']:.1f}\n"
+            if 'steals_per_game' in player_data:
+                response += f"• Steals per Game: {player_data['steals_per_game']:.1f}\n"
+            if 'blocks_per_game' in player_data:
+                response += f"• Blocks per Game: {player_data['blocks_per_game']:.1f}\n"
+            if 'turnovers_per_game' in player_data:
+                response += f"• Turnovers per Game: {player_data['turnovers_per_game']:.1f}\n"
+            if 'field_goal_percentage' in player_data and player_data['field_goal_percentage']:
+                response += f"• Field Goal %: {player_data['field_goal_percentage']*100:.1f}%\n"
+            if 'three_point_percentage' in player_data and player_data['three_point_percentage']:
+                response += f"• Three Point %: {player_data['three_point_percentage']*100:.1f}%\n"
+            if 'free_throw_percentage' in player_data and player_data['free_throw_percentage']:
+                response += f"• Free Throw %: {player_data['free_throw_percentage']*100:.1f}%\n"
+            if 'minutes_per_game' in player_data:
+                response += f"• Minutes per Game: {player_data['minutes_per_game']:.1f}\n"
+            
+            # Add totals if available
+            if 'total_points' in player_data:
+                response += f"• Total Points: {player_data['total_points']:,}\n"
+            if 'total_rebounds' in player_data:
+                response += f"• Total Rebounds: {player_data['total_rebounds']:,}\n"
+            if 'total_assists' in player_data:
+                response += f"• Total Assists: {player_data['total_assists']:,}\n"
         
         return response
     
@@ -510,6 +582,77 @@ class NBAMCPServer:
             response += f"• Field Goal %: {team_data['field_goal_percentage']*100:.1f}%\n"
         
         return response
+    
+    async def _build_shooting_stats_query(self, player_name: str, season: Optional[str] = None) -> Tuple[str, List]:
+        """Build shooting statistics query."""
+        query = """
+        SELECT 
+            p.player_name,
+            COUNT(pgs.game_id) as games_played,
+            ROUND(AVG(pgs.field_goals_made)::numeric, 1) as field_goals_made_per_game,
+            ROUND(AVG(pgs.field_goals_attempted)::numeric, 1) as field_goals_attempted_per_game,
+            ROUND(AVG(CASE WHEN pgs.field_goals_attempted > 0 THEN pgs.field_goals_made::float / pgs.field_goals_attempted END)::numeric, 3) as field_goal_percentage,
+            ROUND(AVG(pgs.three_pointers_made)::numeric, 1) as three_pointers_made_per_game,
+            ROUND(AVG(pgs.three_pointers_attempted)::numeric, 1) as three_pointers_attempted_per_game,
+            ROUND(AVG(CASE WHEN pgs.three_pointers_attempted > 0 THEN pgs.three_pointers_made::float / pgs.three_pointers_attempted END)::numeric, 3) as three_point_percentage,
+            ROUND(AVG(pgs.free_throws_made)::numeric, 1) as free_throws_made_per_game,
+            ROUND(AVG(pgs.free_throws_attempted)::numeric, 1) as free_throws_attempted_per_game,
+            ROUND(AVG(CASE WHEN pgs.free_throws_attempted > 0 THEN pgs.free_throws_made::float / pgs.free_throws_attempted END)::numeric, 3) as free_throw_percentage,
+            SUM(pgs.field_goals_made) as total_field_goals_made,
+            SUM(pgs.field_goals_attempted) as total_field_goals_attempted,
+            SUM(pgs.three_pointers_made) as total_three_pointers_made,
+            SUM(pgs.three_pointers_attempted) as total_three_pointers_attempted
+        FROM player_game_stats pgs
+        JOIN players p ON pgs.player_id = p.id
+        JOIN enhanced_games g ON pgs.game_id = g.game_id
+        WHERE p.player_name ILIKE $1 AND pgs.minutes_played > 0
+        """
+        
+        params = [f"%{player_name}%"]
+        
+        if season:
+            query += " AND g.season = $2"
+            params.append(season)
+        
+        query += " GROUP BY p.id, p.player_name"
+        
+        return query, params
+    
+    async def _build_advanced_stats_query(self, player_name: str, season: Optional[str] = None) -> Tuple[str, List]:
+        """Build advanced statistics query."""
+        query = """
+        SELECT 
+            p.player_name,
+            COUNT(pgs.game_id) as games_played,
+            ROUND(AVG(pgs.points)::numeric, 1) as points_per_game,
+            ROUND(AVG(pgs.rebounds_total)::numeric, 1) as rebounds_per_game,
+            ROUND(AVG(pgs.assists)::numeric, 1) as assists_per_game,
+            ROUND(AVG(pgs.steals)::numeric, 1) as steals_per_game,
+            ROUND(AVG(pgs.blocks)::numeric, 1) as blocks_per_game,
+            ROUND(AVG(pgs.turnovers)::numeric, 1) as turnovers_per_game,
+            ROUND(AVG(pgs.personal_fouls)::numeric, 1) as fouls_per_game,
+            ROUND(AVG(pgs.plus_minus)::numeric, 1) as plus_minus_per_game,
+            ROUND(AVG(pgs.minutes_played)::numeric, 1) as minutes_per_game,
+            ROUND(AVG(CASE WHEN pgs.field_goals_attempted > 0 THEN pgs.field_goals_made::float / pgs.field_goals_attempted END)::numeric, 3) as field_goal_percentage,
+            ROUND(AVG(CASE WHEN pgs.three_pointers_attempted > 0 THEN pgs.three_pointers_made::float / pgs.three_pointers_attempted END)::numeric, 3) as three_point_percentage,
+            ROUND(AVG(CASE WHEN pgs.free_throws_attempted > 0 THEN pgs.free_throws_made::float / pgs.free_throws_attempted END)::numeric, 3) as free_throw_percentage,
+            -- Simple efficiency calculation
+            ROUND(AVG((pgs.points + pgs.rebounds_total + pgs.assists + pgs.steals + pgs.blocks - pgs.turnovers - pgs.personal_fouls))::numeric, 1) as efficiency_rating
+        FROM player_game_stats pgs
+        JOIN players p ON pgs.player_id = p.id
+        JOIN enhanced_games g ON pgs.game_id = g.game_id
+        WHERE p.player_name ILIKE $1 AND pgs.minutes_played > 0
+        """
+        
+        params = [f"%{player_name}%"]
+        
+        if season:
+            query += " AND g.season = $2"
+            params.append(season)
+        
+        query += " GROUP BY p.id, p.player_name"
+        
+        return query, params
     
     async def _format_query_results(self, results: List[Dict], processed_query, context: QueryContext) -> str:
         """Format query results based on query type and context."""
