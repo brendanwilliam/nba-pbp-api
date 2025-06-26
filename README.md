@@ -8,6 +8,9 @@ Purpose: Comprehensive NBA play-by-play data API with scraping, storage, and que
 
 This project scrapes NBA play-by-play data from the official NBA website, stores it in PostgreSQL, and provides both REST API and MCP server interfaces for querying the data. The system handles all NBA games from the 1996-97 season through 2024-25.
 
+### 🏀 **NEW: MCP Server for AI Integration**
+The project now includes a Model Context Protocol (MCP) server that enables Large Language Models like Claude to query NBA data using natural language. See the [MCP Server Quick Start Guide](docs/mcp-quick-start.md) for setup instructions.
+
 ## Current Status & Commands
 As of June 20th, 2025, we are scraping NBA play-by-play data from the official NBA website and storing the raw JSON data in the `raw_game_data` table. We have also created a game URL queue system that contains all games from the 1996-97 season through 2024-25. We are periodically populating the other database tables with the parsed data from the raw JSON data. Here are the commands to run:
 
@@ -47,6 +50,24 @@ python src/scripts/manual_queue_manager.py 0020600151 0020600157 --reference 002
 
 # Then immediately scrape the newly added games
 python -m src.scripts.mass_game_scraper --max-workers 3 --rate-limit 2.0 --batch-size 7
+
+# MCP SERVER COMMANDS (NEW)
+# Start the MCP server for AI integration
+python src/mcp/start_mcp_server.py
+
+# Test MCP server components
+pytest src/mcp/tests/ -v
+
+# Test natural language processing
+python -c "
+import asyncio
+from src.mcp.query_translator import NaturalLanguageQueryTranslator
+async def test():
+    t = NaturalLanguageQueryTranslator()
+    c = await t.translate_query('LeBron James career stats')
+    print(f'✅ Query understood with {c.confidence:.2f} confidence')
+asyncio.run(test())
+"
 ```
 
 ### Status Report (2025-06-20)

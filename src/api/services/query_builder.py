@@ -133,18 +133,18 @@ class QueryBuilder:
                 team_names = [t.strip() for t in team_name.split(",")]
                 # Add join to teams table if needed
                 if "teams t" not in " ".join(self.joins):
-                    self.joins.append(f"JOIN teams t ON {base_table_alias}.team_id = t.team_id")
+                    self.joins.append(f"JOIN teams t ON {base_table_alias}.team_id = t.id")
                 param_name = self._get_param_name()
                 name_conditions = []
                 for name in team_names:
                     name_param = self._get_param_name()
-                    name_conditions.append(f"(t.team_name ILIKE ${len(self.parameters) + 1} OR t.team_abbreviation ILIKE ${len(self.parameters) + 1})")
+                    name_conditions.append(f"(t.full_name ILIKE ${len(self.parameters) + 1} OR t.tricode ILIKE ${len(self.parameters) + 1})")
                     self.parameters[name_param] = f"%{name}%"
                 self.where_conditions.append(f"({' OR '.join(name_conditions)})")
             else:
                 # Add join to teams table if needed
                 if "teams t" not in " ".join(self.joins):
-                    self.joins.append(f"JOIN teams t ON {base_table_alias}.team_id = t.team_id")
+                    self.joins.append(f"JOIN teams t ON {base_table_alias}.team_id = t.id")
                 param_name = self._get_param_name()
                 self.where_conditions.append(f"(t.full_name ILIKE ${len(self.parameters) + 1} OR t.tricode ILIKE ${len(self.parameters) + 1})")
                 self.parameters[param_name] = f"%{team_name}%"
@@ -327,6 +327,58 @@ class PlayerQueryBuilder(QueryBuilder):
         ])
         # Only count games where player actually played (minutes > 0)
         self.where_conditions.append("pgs.minutes_played > 0")
+    
+    def build_basic_stats_query(self, player_name: str = None, season: str = None) -> Tuple[str, List[Any]]:
+        """Build a basic stats query for player statistics with aggregation."""
+        # Apply filters
+        if player_name:
+            self.add_player_filters(player_name=player_name)
+        if season:
+            self.add_season_filter(season)
+        
+        # Define aggregation fields for basic stats
+        select_fields = [
+            "p.player_name",
+            "COUNT(pgs.game_id) as games_played",
+            "ROUND(AVG(pgs.points)::numeric, 1) as points_per_game",
+            "ROUND(AVG(pgs.rebounds_total)::numeric, 1) as rebounds_per_game", 
+            "ROUND(AVG(pgs.assists)::numeric, 1) as assists_per_game",
+            "ROUND(AVG(pgs.steals)::numeric, 1) as steals_per_game",
+            "ROUND(AVG(pgs.blocks)::numeric, 1) as blocks_per_game",
+            "ROUND(AVG(pgs.turnovers)::numeric, 1) as turnovers_per_game",
+            "ROUND(AVG(CASE WHEN pgs.field_goals_attempted > 0 THEN pgs.field_goals_made::float / pgs.field_goals_attempted END)::numeric, 3) as field_goal_percentage",
+            "ROUND(AVG(CASE WHEN pgs.three_pointers_attempted > 0 THEN pgs.three_pointers_made::float / pgs.three_pointers_attempted END)::numeric, 3) as three_point_percentage",
+            "ROUND(AVG(CASE WHEN pgs.free_throws_attempted > 0 THEN pgs.free_throws_made::float / pgs.free_throws_attempted END)::numeric, 3) as free_throw_percentage",
+            "SUM(pgs.points) as total_points",
+            "SUM(pgs.rebounds_total) as total_rebounds", 
+            "SUM(pgs.assists) as total_assists",
+            "ROUND(AVG(pgs.minutes_played)::numeric, 1) as minutes_per_game"
+        ]
+        
+        # Build the query with aggregation
+        query_parts = [
+            f"SELECT {', '.join(select_fields)}",
+            f"FROM {self.base_table}"
+        ]
+        
+        if self.joins:
+            query_parts.extend(self.joins)
+        
+        if self.where_conditions:
+            query_parts.append(f"WHERE {' AND '.join(self.where_conditions)}")
+        
+        # Add GROUP BY for aggregation
+        query_parts.append("GROUP BY p.player_name")
+        
+        # Convert parameters dict to ordered list
+        param_values = []
+        for i in range(1, len(self.parameters) + 1):
+            for key, value in self.parameters.items():
+                if key == f"param_{i}":
+                    param_values.append(value)
+                    break
+        
+        return " ".join(query_parts), param_values
 
 
 class TeamQueryBuilder(QueryBuilder):
@@ -337,8 +389,62 @@ class TeamQueryBuilder(QueryBuilder):
         # Add common joins for team queries
         self.joins.extend([
             "JOIN enhanced_games eg ON tgs.game_id = eg.game_id",
-            "JOIN teams t ON tgs.team_id = t.team_id"
+            "JOIN teams t ON tgs.team_id = t.id"
         ])
+    
+    def build_basic_stats_query(self, team_name: str = None, season: str = None) -> Tuple[str, List[Any]]:
+        """Build a basic stats query for team statistics with aggregation."""
+        # Apply filters
+        if team_name:
+            self.add_team_filters(team_name=team_name)
+        if season:
+            self.add_season_filter(season)
+        
+        # Define aggregation fields for basic team stats
+        select_fields = [
+            "t.full_name as team_name",
+            "t.tricode as team_abbreviation", 
+            "COUNT(tgs.game_id) as games_played",
+            "SUM(CASE WHEN tgs.wins > tgs.losses THEN 1 ELSE 0 END) as wins",
+            "SUM(CASE WHEN tgs.wins < tgs.losses THEN 1 ELSE 0 END) as losses",
+            "ROUND(AVG(tgs.points)::numeric, 1) as points_per_game",
+            "ROUND(AVG(tgs.rebounds_total)::numeric, 1) as rebounds_per_game",
+            "ROUND(AVG(tgs.assists)::numeric, 1) as assists_per_game", 
+            "ROUND(AVG(tgs.steals)::numeric, 1) as steals_per_game",
+            "ROUND(AVG(tgs.blocks)::numeric, 1) as blocks_per_game",
+            "ROUND(AVG(tgs.turnovers)::numeric, 1) as turnovers_per_game",
+            "ROUND(AVG(CASE WHEN tgs.field_goals_attempted > 0 THEN tgs.field_goals_made::float / tgs.field_goals_attempted END)::numeric, 3) as field_goal_percentage",
+            "ROUND(AVG(CASE WHEN tgs.three_pointers_attempted > 0 THEN tgs.three_pointers_made::float / tgs.three_pointers_attempted END)::numeric, 3) as three_point_percentage",
+            "ROUND(AVG(CASE WHEN tgs.free_throws_attempted > 0 THEN tgs.free_throws_made::float / tgs.free_throws_attempted END)::numeric, 3) as free_throw_percentage",
+            "SUM(tgs.points) as total_points",
+            "SUM(tgs.rebounds_total) as total_rebounds",
+            "SUM(tgs.assists) as total_assists"
+        ]
+        
+        # Build the query with aggregation
+        query_parts = [
+            f"SELECT {', '.join(select_fields)}",
+            f"FROM {self.base_table}"
+        ]
+        
+        if self.joins:
+            query_parts.extend(self.joins)
+        
+        if self.where_conditions:
+            query_parts.append(f"WHERE {' AND '.join(self.where_conditions)}")
+        
+        # Add GROUP BY for aggregation
+        query_parts.append("GROUP BY t.full_name, t.tricode")
+        
+        # Convert parameters dict to ordered list
+        param_values = []
+        for i in range(1, len(self.parameters) + 1):
+            for key, value in self.parameters.items():
+                if key == f"param_{i}":
+                    param_values.append(value)
+                    break
+        
+        return " ".join(query_parts), param_values
 
 
 class LineupQueryBuilder(QueryBuilder):

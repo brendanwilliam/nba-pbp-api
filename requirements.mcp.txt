@@ -1,21 +1,22 @@
-# MCP Server Requirements - Lighter than API requirements
+# MCP Server specific requirements
+mcp>=1.0.0
 
-# Database
+# Core dependencies (shared with main API)
 asyncpg>=0.29.0
 sqlalchemy>=2.0.0
-
-# MCP Protocol
-mcp>=1.0.0  # When MCP package is available
-websockets>=12.0
 pydantic>=2.5.0
-
-# Data processing (lighter than API)
 pandas>=2.0.0
 numpy>=1.24.0
-
-# Utilities
 python-dotenv>=1.0.0
-rich>=13.0.0
+
+# Natural language processing
+nltk>=3.8.0
+spacy>=3.7.0
+fuzzywuzzy>=0.18.0
+python-Levenshtein>=0.25.0
+
+# Async utilities
+aiofiles>=23.0.0
 
 # Testing
 pytest>=7.4.0

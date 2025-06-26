@@ -69,6 +69,7 @@ The project follows a modular architecture with completed and planned components
 - **Tables**: `teams`, `games`, `players`, `game_url_queue`, `raw_game_data`, `scrape_queue`
 - **Indexing**: Optimized for status, season, date, and priority-based queries
 - **Migration System**: Alembic-based schema versioning
+- **Schema Documentation**: Complete table and column reference available in `src/database/README.md`
 
 ## Development Setup
 
@@ -185,6 +186,18 @@ The full synchronization tool handles:
 - Game URLs follow the pattern: `nba.com/game/{away_team}-vs-{home_team}-{game_id}`
 - The scraper needs to handle a queue system to track scraping status and manage the large volume of games (1996-2025)
 - The MCP server will translate natural language queries to database queries for LLM integration
+
+## Database Schema Reference
+
+**IMPORTANT**: When writing SQL queries for the API or MCP servers, always reference the complete database schema documentation in `src/database/README.md`. This file contains:
+
+- **Exact table names and column names** for all database tables
+- **Data types and constraints** for each column  
+- **Relationships and foreign keys** between tables
+- **Common query patterns** and example SQL queries
+- **Database views** available for simplified queries
+
+This prevents hallucination of non-existent tables or columns and ensures accurate SQL query generation.
 
 ## Current Status
 Please use this section to keep track of high-level objectives and their status. Copy the contents over to `README.md` whenever you update this section.

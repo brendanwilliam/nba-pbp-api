@@ -1,8 +1,12 @@
 # NBA Play-by-Play API Documentation
 
-This directory contains comprehensive documentation for the NBA Play-by-Play API project.
+This directory contains comprehensive documentation for the NBA Play-by-Play API project, including the new MCP server for AI integration.
 
 ## Available Documentation
+
+### 🏀 MCP Server (NEW)
+- **[MCP Quick Start Guide](mcp-quick-start.md)** - Get the MCP server running in 5 minutes
+- **[MCP Server Guide](mcp-server-guide.md)** - Comprehensive setup, usage, and troubleshooting guide
 
 ### Database Management
 - **[Database Management Guide](database-management.md)** - Complete documentation for database synchronization tools, workflows, and best practices
@@ -16,6 +20,30 @@ This directory contains comprehensive documentation for the NBA Play-by-Play API
 - **[Instructions Directory](../instructions/)** - Individual development plans and guides
 
 ## Tool Quick Links
+
+### 🏀 MCP Server (NEW)
+```bash
+# Start MCP server for AI integration
+python src/mcp/start_mcp_server.py
+
+# Test natural language processing
+python -c "
+import asyncio
+from src.mcp.query_translator import NaturalLanguageQueryTranslator
+async def test():
+    t = NaturalLanguageQueryTranslator()
+    c = await t.translate_query('LeBron James career stats')
+    print(f'✅ Query understood with {c.confidence:.2f} confidence')
+asyncio.run(test())
+"
+
+# Run MCP tests
+pytest src/mcp/tests/ -v
+
+# Full documentation
+docs/mcp-quick-start.md
+docs/mcp-server-guide.md
+```
 
 ### Database Synchronization
 ```bash
