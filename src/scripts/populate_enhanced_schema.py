@@ -19,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 try:
     from core.database import get_db
     from analytics.lineup_tracker import LineupTracker
+    from analytics.possession_tracker import PossessionTracker
     from sqlalchemy import text, select, and_
     from sqlalchemy.orm import Session
     from sqlalchemy.exc import IntegrityError
@@ -44,7 +45,9 @@ class EnhancedSchemaPopulator:
             'play_events_created': 0,
             'player_stats_created': 0,
             'team_stats_created': 0,
-            'periods_created': 0
+            'periods_created': 0,
+            'possessions_created': 0,
+            'play_possession_links_created': 0
         }
     
     def close(self):
@@ -958,7 +961,7 @@ class EnhancedSchemaPopulator:
             pass
         
         return None
-    
+
     def _is_possession_change_event(self, action: Dict[str, Any]) -> bool:
         """Determine if an event represents a change of possession"""
         action_type = action.get('actionType', '').lower()
@@ -1173,6 +1176,167 @@ class EnhancedSchemaPopulator:
             print(f"    ⚠️ Failed to extract lineup tracking data: {str(e)[:150]}...")
             return [], []
     
+    def extract_possession_data(self, raw_json: Dict[str, Any], game_id: str) -> List[Dict[str, Any]]:
+        """Extract possession events using PossessionTracker"""
+        try:
+            # Extract basic game info to get team IDs
+            game_info = self.extract_game_basic_info(raw_json)
+            if not game_info:
+                return []
+            
+            home_team_id = game_info.get('home_team_id')
+            away_team_id = game_info.get('away_team_id')
+            
+            if not home_team_id or not away_team_id:
+                print(f"    ⚠️ Missing team IDs for possession tracking")
+                return []
+            
+            # Extract play events for possession analysis
+            play_events = self.extract_play_events(raw_json, game_id)
+            if not play_events:
+                return []
+            
+            # Initialize possession tracker
+            tracker = PossessionTracker(game_id, home_team_id, away_team_id)
+            
+            # Process events to generate possessions
+            possessions = tracker.process_play_events(play_events)
+            
+            # Convert to database format
+            possession_data = []
+            for possession in possessions:
+                possession_data.append({
+                    'game_id': possession.game_id,
+                    'possession_number': possession.possession_number,
+                    'team_id': possession.team_id,
+                    'start_period': possession.start_period,
+                    'start_time_remaining': possession.start_time_remaining,
+                    'start_seconds_elapsed': possession.start_seconds_elapsed,
+                    'end_period': possession.end_period,
+                    'end_time_remaining': possession.end_time_remaining,
+                    'end_seconds_elapsed': possession.end_seconds_elapsed,
+                    'possession_outcome': possession.possession_outcome,
+                    'points_scored': possession.points_scored,
+                    'play_ids': possession.play_ids
+                })
+            
+            return possession_data
+            
+        except Exception as e:
+            print(f"    ⚠️ Failed to extract possession data: {str(e)[:150]}...")
+            return []
+    
+    def insert_possession_events(self, possession_data: List[Dict[str, Any]]) -> int:
+        """Insert possession events into the database"""
+        if not possession_data:
+            return 0
+        
+        if self.dry_run:
+            print(f"  [DRY RUN] Would create {len(possession_data)} possession events")
+            return len(possession_data)
+        
+        inserted_count = 0
+        error_count = 0
+        
+        for possession in possession_data:
+            try:
+                # Store play_ids for junction table, then remove from possession data
+                play_ids = possession.pop('play_ids', [])
+                
+                # Insert possession event
+                result = self.db.execute(text("""
+                    INSERT INTO possession_events (
+                        game_id, possession_number, team_id, start_period, start_time_remaining,
+                        start_seconds_elapsed, end_period, end_time_remaining, end_seconds_elapsed,
+                        possession_outcome, points_scored
+                    ) VALUES (
+                        :game_id, :possession_number, :team_id, :start_period, :start_time_remaining,
+                        :start_seconds_elapsed, :end_period, :end_time_remaining, :end_seconds_elapsed,
+                        :possession_outcome, :points_scored
+                    ) RETURNING possession_id
+                """), possession)
+                
+                possession_id = result.fetchone()[0]
+                inserted_count += 1
+                self.stats['possessions_created'] += 1
+                
+                # Insert play-possession links
+                links_created = self.insert_play_possession_links(possession_id, play_ids)
+                self.stats['play_possession_links_created'] += links_created
+                
+            except Exception as e:
+                error_count += 1
+                if error_count <= 3:
+                    print(f"    ⚠️ Possession error: {str(e)[:100]}...")
+                continue
+        
+        if error_count > 0:
+            print(f"    Total possession errors: {error_count}")
+        
+        return inserted_count
+    
+    def insert_play_possession_links(self, possession_id: int, play_ids: List[int]) -> int:
+        """Insert play-possession junction table entries"""
+        if not play_ids:
+            return 0
+        
+        inserted_count = 0
+        
+        for play_id in play_ids:
+            try:
+                self.db.execute(text("""
+                    INSERT INTO play_possession_events (possession_id, play_id)
+                    VALUES (:possession_id, :play_id)
+                """), {
+                    'possession_id': possession_id,
+                    'play_id': play_id
+                })
+                inserted_count += 1
+            except Exception:
+                # Skip duplicate or invalid entries
+                continue
+        
+        return inserted_count
+    
+    def update_play_events_with_possessions(self, possession_data: List[Dict[str, Any]]):
+        """Update play_events table with possession_id references"""
+        if self.dry_run:
+            print(f"  [DRY RUN] Would update play_events with possession IDs")
+            return
+        
+        # Get possession IDs from database
+        for possession in possession_data:
+            game_id = possession['game_id']
+            possession_number = possession['possession_number']
+            
+            # Get possession_id from database
+            result = self.db.execute(text("""
+                SELECT possession_id FROM possession_events 
+                WHERE game_id = :game_id AND possession_number = :possession_number
+            """), {
+                'game_id': game_id,
+                'possession_number': possession_number
+            })
+            row = result.fetchone()
+            if not row:
+                continue
+                
+            possession_id = row[0]
+            play_ids = possession.get('play_ids', [])
+            
+            # Update play_events with possession_id
+            for play_id in play_ids:
+                try:
+                    self.db.execute(text("""
+                        UPDATE play_events SET possession_id = :possession_id 
+                        WHERE event_id = :play_id
+                    """), {
+                        'possession_id': possession_id,
+                        'play_id': play_id
+                    })
+                except Exception:
+                    continue
+    
     def process_game(self, game_id: str, raw_json: Dict[str, Any]) -> bool:
         """Process a single game"""
         success = True
@@ -1343,6 +1507,35 @@ class EnhancedSchemaPopulator:
                 # Don't fail the whole process for lineup tracking issues
                 print(f"  ⚠️ Continuing without lineup tracking data")
             
+            # 7. Insert possession tracking data
+            try:
+                print(f"  Extracting possession tracking data...")
+                possession_data = self.extract_possession_data(raw_json, game_id)
+                
+                if possession_data:
+                    print(f"  Inserting possession events...")
+                    possessions_inserted = self.insert_possession_events(possession_data)
+                    if not self.dry_run:
+                        self.db.commit()
+                    
+                    print(f"  Updating play events with possession IDs...")
+                    self.update_play_events_with_possessions(possession_data)
+                    if not self.dry_run:
+                        self.db.commit()
+                    
+                    print(f"  ✅ Possession tracking: {possessions_inserted} possessions created")
+                else:
+                    print(f"  ⏭️ No possession data extracted")
+            except Exception as e:
+                print(f"  ❌ Possession tracking failed: {e}")
+                if not self.dry_run:
+                    try:
+                        self.db.rollback()
+                    except:
+                        pass
+                # Don't fail the whole process for possession tracking issues
+                print(f"  ⚠️ Continuing without possession tracking data")
+            
             if success:
                 print(f"  ✅ Game {game_id} processed successfully")
                 self.stats['games_processed'] += 1
@@ -1396,6 +1589,8 @@ class EnhancedSchemaPopulator:
         print(f"  Player stats created: {self.stats['player_stats_created']}")
         print(f"  Lineup states created: {self.stats.get('lineup_states_created', 0)}")
         print(f"  Substitution events created: {self.stats.get('substitution_events_created', 0)}")
+        print(f"  Possessions created: {self.stats.get('possessions_created', 0)}")
+        print(f"  Play-possession links created: {self.stats.get('play_possession_links_created', 0)}")
 
 
 def backfill_analytics_data(dry_run: bool = False, limit: Optional[int] = None):

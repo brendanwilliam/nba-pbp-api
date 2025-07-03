@@ -475,7 +475,7 @@ class ShotQueryBuilder(QueryBuilder):
 
 
 class PlayByPlayQueryBuilder(QueryBuilder):
-    """Specialized query builder for play-by-play data"""
+    """Specialized query builder for play-by-play data with comprehensive filtering"""
     
     def __init__(self):
         super().__init__("play_events pe")
@@ -486,10 +486,292 @@ class PlayByPlayQueryBuilder(QueryBuilder):
         # Add optional joins that can be enabled based on query needs
         self.optional_joins = {
             "players": "LEFT JOIN players p ON pe.player_id = p.id",
-            "teams": "LEFT JOIN teams t ON pe.team_id = t.id"
+            "teams": "LEFT JOIN teams t ON pe.team_id = t.team_id",
+            "home_team": "LEFT JOIN teams ht ON eg.home_team_id = ht.team_id",
+            "away_team": "LEFT JOIN teams at ON eg.away_team_id = at.team_id",
+            "assist_player": "LEFT JOIN players ap ON pe.assist_player_id = ap.id"
         }
     
     def add_optional_join(self, join_type: str):
         """Add optional joins for additional data"""
         if join_type in self.optional_joins:
-            self.joins.append(self.optional_joins[join_type])
+            join_sql = self.optional_joins[join_type]
+            if join_sql not in self.joins:  # Avoid duplicates
+                self.joins.append(join_sql)
+    
+    def add_shot_coordinate_filters(self, x_min=None, x_max=None, y_min=None, y_max=None, 
+                                  shot_distance_min=None, shot_distance_max=None):
+        """Add shot coordinate and distance filters"""
+        # Ensure we only filter on actual shots
+        self.where_conditions.append("pe.shot_x IS NOT NULL AND pe.shot_y IS NOT NULL")
+        
+        if x_min is not None:
+            param_name = self._get_param_name()
+            self.where_conditions.append(f"pe.shot_x >= ${len(self.parameters) + 1}")
+            self.parameters[param_name] = x_min
+        
+        if x_max is not None:
+            param_name = self._get_param_name()
+            self.where_conditions.append(f"pe.shot_x <= ${len(self.parameters) + 1}")
+            self.parameters[param_name] = x_max
+        
+        if y_min is not None:
+            param_name = self._get_param_name()
+            self.where_conditions.append(f"pe.shot_y >= ${len(self.parameters) + 1}")
+            self.parameters[param_name] = y_min
+        
+        if y_max is not None:
+            param_name = self._get_param_name()
+            self.where_conditions.append(f"pe.shot_y <= ${len(self.parameters) + 1}")
+            self.parameters[param_name] = y_max
+        
+        if shot_distance_min is not None:
+            param_name = self._get_param_name()
+            self.where_conditions.append(f"pe.shot_distance >= ${len(self.parameters) + 1}")
+            self.parameters[param_name] = shot_distance_min
+        
+        if shot_distance_max is not None:
+            param_name = self._get_param_name()
+            self.where_conditions.append(f"pe.shot_distance <= ${len(self.parameters) + 1}")
+            self.parameters[param_name] = shot_distance_max
+    
+    def add_time_filters(self, period=None, time_remaining_min=None, time_remaining_max=None,
+                        time_elapsed_min=None, time_elapsed_max=None, crunch_time=False):
+        """Add time-based filters for specific game situations"""
+        
+        if period is not None:
+            if isinstance(period, list):
+                param_name = self._get_param_name()
+                self.where_conditions.append(f"pe.period = ANY(${len(self.parameters) + 1})")
+                self.parameters[param_name] = period
+            else:
+                param_name = self._get_param_name()
+                self.where_conditions.append(f"pe.period = ${len(self.parameters) + 1}")
+                self.parameters[param_name] = period
+        
+        if time_elapsed_min is not None:
+            param_name = self._get_param_name()
+            self.where_conditions.append(f"pe.time_elapsed_seconds >= ${len(self.parameters) + 1}")
+            self.parameters[param_name] = time_elapsed_min
+        
+        if time_elapsed_max is not None:
+            param_name = self._get_param_name()
+            self.where_conditions.append(f"pe.time_elapsed_seconds <= ${len(self.parameters) + 1}")
+            self.parameters[param_name] = time_elapsed_max
+        
+        if crunch_time:
+            # Crunch time: last 5 minutes of 4th quarter or any overtime
+            crunch_condition = (
+                "(pe.period = 4 AND pe.time_elapsed_seconds >= 2580) OR "  # Last 5 min of 4th (48*60 - 5*60 = 2580)
+                "(pe.period > 4)"  # Any overtime
+            )
+            self.where_conditions.append(crunch_condition)
+    
+    def add_event_type_filters(self, event_types=None, shot_made=None, event_action_types=None):
+        """Add event type and action filters"""
+        
+        if event_types:
+            if isinstance(event_types, str):
+                event_types = [event_types]
+            param_name = self._get_param_name()
+            self.where_conditions.append(f"pe.event_type = ANY(${len(self.parameters) + 1})")
+            self.parameters[param_name] = event_types
+        
+        if shot_made is not None:
+            param_name = self._get_param_name()
+            self.where_conditions.append(f"pe.shot_made = ${len(self.parameters) + 1}")
+            self.parameters[param_name] = shot_made
+        
+        if event_action_types:
+            if isinstance(event_action_types, str):
+                event_action_types = [event_action_types]
+            param_name = self._get_param_name()
+            self.where_conditions.append(f"pe.event_action_type = ANY(${len(self.parameters) + 1})")
+            self.parameters[param_name] = event_action_types
+    
+    def add_score_context_filters(self, score_margin_min=None, score_margin_max=None, 
+                                close_game=False, blowout_threshold=None):
+        """Add score context filters for game situations"""
+        
+        if score_margin_min is not None:
+            param_name = self._get_param_name()
+            self.where_conditions.append(f"pe.score_margin >= ${len(self.parameters) + 1}")
+            self.parameters[param_name] = score_margin_min
+        
+        if score_margin_max is not None:
+            param_name = self._get_param_name()
+            self.where_conditions.append(f"pe.score_margin <= ${len(self.parameters) + 1}")
+            self.parameters[param_name] = score_margin_max
+        
+        if close_game:
+            # Close game: score margin within 5 points
+            self.where_conditions.append("ABS(pe.score_margin) <= 5")
+        
+        if blowout_threshold is not None:
+            param_name = self._get_param_name()
+            self.where_conditions.append(f"ABS(pe.score_margin) >= ${len(self.parameters) + 1}")
+            self.parameters[param_name] = blowout_threshold
+    
+    def add_shot_zone_filters(self, shot_zones=None, shot_types=None):
+        """Add shot zone and type filters"""
+        
+        if shot_zones:
+            if isinstance(shot_zones, str):
+                shot_zones = [shot_zones]
+            param_name = self._get_param_name()
+            self.where_conditions.append(f"pe.shot_zone = ANY(${len(self.parameters) + 1})")
+            self.parameters[param_name] = shot_zones
+        
+        if shot_types:
+            if isinstance(shot_types, str):
+                shot_types = [shot_types]
+            param_name = self._get_param_name()
+            self.where_conditions.append(f"pe.shot_type = ANY(${len(self.parameters) + 1})")
+            self.parameters[param_name] = shot_types
+    
+    def add_clutch_situation_filters(self, last_minutes=5, score_within=5):
+        """Add filters for clutch situations (close games in final minutes)"""
+        # Clutch: last X minutes of regulation or overtime, score within Y points
+        clutch_condition = (
+            f"((pe.period = 4 AND pe.time_elapsed_seconds >= {2880 - last_minutes * 60}) OR "  # Last X min of 4th
+            f"(pe.period > 4 AND pe.time_elapsed_seconds >= {(pe.period - 1) * 25 * 60 + 2880 - last_minutes * 60})) AND "  # OT
+            f"ABS(pe.score_margin) <= {score_within}"
+        )
+        self.where_conditions.append(clutch_condition)
+    
+    def build_shot_chart_query(self, include_coordinates=True, include_zones=True):
+        """Build specialized query for shot chart data"""
+        # Only require coordinates if specifically requested and available
+        if include_coordinates:
+            # Make coordinates optional - include shots with or without coordinates
+            pass  # Don't require coordinates by default
+        
+        # Build select fields for shot chart
+        select_fields = [
+            "pe.event_id",
+            "pe.game_id", 
+            "eg.season",
+            "eg.game_date",
+            "pe.period",
+            "pe.time_remaining",
+            "pe.shot_made",
+            "pe.shot_distance"
+        ]
+        
+        if include_coordinates:
+            select_fields.extend(["pe.shot_x", "pe.shot_y"])
+        
+        if include_zones:
+            select_fields.extend(["pe.shot_zone", "pe.shot_type"])
+        
+        # Add player info if joined
+        if any("players p" in join for join in self.joins):
+            select_fields.append("p.player_name")
+        
+        # Add team info if joined 
+        if any("teams t" in join for join in self.joins):
+            select_fields.append("t.full_name as team_name")
+        
+        return self.build_query(select_fields)
+    
+    def build_play_sequence_query(self, order_by_time=True):
+        """Build query for sequential play-by-play events"""
+        select_fields = [
+            "pe.event_id",
+            "pe.game_id",
+            "pe.period", 
+            "pe.time_remaining",
+            "pe.time_elapsed_seconds",
+            "pe.event_type",
+            "pe.event_action_type",
+            "pe.description",
+            "pe.home_score",
+            "pe.away_score",
+            "pe.score_margin"
+        ]
+        
+        # Add player and team names if joined
+        if any("players p" in join for join in self.joins):
+            select_fields.append("p.player_name")
+        if any("teams t" in join for join in self.joins):
+            select_fields.append("t.full_name as team_name")
+        if any("assist_player" in join for join in self.joins):
+            select_fields.append("ap.player_name as assist_player_name")
+        
+        query, params = self.build_query(select_fields)
+        
+        if order_by_time:
+            query += " ORDER BY pe.game_id, pe.period, pe.time_elapsed_seconds DESC, pe.event_order"
+        
+        return query, params
+    
+    def build_distinct_games_query(self, include_game_details=True):
+        """Build query to count distinct games and optionally include game details"""
+        # First build the base query to count distinct games
+        count_query_parts = [
+            "SELECT COUNT(DISTINCT pe.game_id) as unique_games",
+            f"FROM {self.base_table}"
+        ]
+        
+        if self.joins:
+            count_query_parts.extend(self.joins)
+        
+        if self.where_conditions:
+            count_query_parts.append(f"WHERE {' AND '.join(self.where_conditions)}")
+        
+        # Convert parameters dict to ordered list for count query
+        param_values = []
+        for i in range(1, len(self.parameters) + 1):
+            for key, value in self.parameters.items():
+                if key == f"param_{i}":
+                    param_values.append(value)
+                    break
+        
+        count_query = " ".join(count_query_parts)
+        
+        if not include_game_details:
+            return count_query, param_values
+        
+        # If game details are requested, also build a query for game breakdown
+        details_select_fields = [
+            "pe.game_id",
+            "eg.game_date",
+            "eg.season",
+            "COUNT(pe.event_id) as total_plays"
+        ]
+        
+        # Add team information if available
+        if any("home_team" in join for join in self.joins):
+            details_select_fields.extend(["ht.full_name as home_team"])
+        if any("away_team" in join for join in self.joins):
+            details_select_fields.extend(["at.full_name as away_team"])
+        
+        details_query_parts = [
+            f"SELECT {', '.join(details_select_fields)}",
+            f"FROM {self.base_table}"
+        ]
+        
+        if self.joins:
+            details_query_parts.extend(self.joins)
+        
+        if self.where_conditions:
+            details_query_parts.append(f"WHERE {' AND '.join(self.where_conditions)}")
+        
+        # Group by game to get per-game statistics
+        group_by_fields = ["pe.game_id", "eg.game_date", "eg.season"]
+        if any("home_team" in join for join in self.joins):
+            group_by_fields.append("ht.full_name")
+        if any("away_team" in join for join in self.joins):
+            group_by_fields.append("at.full_name")
+        
+        details_query_parts.append(f"GROUP BY {', '.join(group_by_fields)}")
+        details_query_parts.append("ORDER BY eg.game_date")
+        
+        details_query = " ".join(details_query_parts)
+        
+        # Return both queries
+        return {
+            'count_query': count_query,
+            'details_query': details_query,
+            'params': param_values
+        }

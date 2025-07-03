@@ -135,3 +135,31 @@ class TestNaturalLanguageQueryTranslator:
         assert high_context.confidence > low_context.confidence
         assert high_context.confidence > 0.5
         assert low_context.confidence < 0.5
+    
+    @pytest.mark.asyncio
+    async def test_game_count_query(self, translator):
+        """Test game count queries."""
+        query = "How many games did LeBron play against Warriors in 2023-24"
+        context = await translator.translate_query(query)
+        
+        assert context.query_type == QueryType.GAME_COUNT
+        assert any(e.entity_type == "player" and e.value == "LeBron James" for e in context.entities)
+        assert any(e.entity_type == "team" and "Warriors" in e.value for e in context.entities)
+        assert context.season == "2023-24"
+        assert context.confidence > 0.5
+    
+    @pytest.mark.asyncio
+    async def test_game_count_variations(self, translator):
+        """Test different variations of game count queries."""
+        variations = [
+            "How many unique games did LeBron play against Warriors",
+            "Number of games between LeBron and Warriors", 
+            "Count of games LeBron played vs Warriors",
+            "Total games LeBron against Warriors"
+        ]
+        
+        for query in variations:
+            context = await translator.translate_query(query)
+            assert context.query_type == QueryType.GAME_COUNT
+            assert any(e.entity_type == "player" and e.value == "LeBron James" for e in context.entities)
+            assert any(e.entity_type == "team" and "Warriors" in e.value for e in context.entities)

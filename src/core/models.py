@@ -145,11 +145,59 @@ class PlayEvent(Base):
     
     # Possession tracking
     possession_change = Column(Boolean, default=False)
+    possession_id = Column(Integer, ForeignKey("possession_events.possession_id"), nullable=True, index=True)
     
     # Video/highlights
     video_available = Column(Boolean, default=False)
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Relationships
+    possession = relationship("PossessionEvent", back_populates="play_events")
+
+
+class PossessionEvent(Base):
+    """Possession events during games - each possession by a team."""
+    __tablename__ = "possession_events"
+    
+    possession_id = Column(Integer, primary_key=True, index=True)
+    game_id = Column(String(20), nullable=False, index=True)
+    possession_number = Column(Integer, nullable=False)
+    team_id = Column(Integer, nullable=False, index=True)
+    
+    # Start timing
+    start_period = Column(Integer, nullable=False)
+    start_time_remaining = Column(String(20))
+    start_seconds_elapsed = Column(Integer)
+    
+    # End timing
+    end_period = Column(Integer)
+    end_time_remaining = Column(String(20))
+    end_seconds_elapsed = Column(Integer)
+    
+    # Outcome
+    possession_outcome = Column(String(50))  # made_shot, turnover, defensive_rebound, etc.
+    points_scored = Column(Integer, default=0)
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    # Relationships
+    play_events = relationship("PlayEvent", back_populates="possession")
+    play_possession_events = relationship("PlayPossessionEvent", back_populates="possession")
+
+
+class PlayPossessionEvent(Base):
+    """Junction table linking plays to possessions (many-to-many)."""
+    __tablename__ = "play_possession_events"
+    
+    play_possession_events_id = Column(Integer, primary_key=True, index=True)
+    possession_id = Column(Integer, ForeignKey("possession_events.possession_id", ondelete="CASCADE"), nullable=False)
+    play_id = Column(Integer, ForeignKey("play_events.event_id", ondelete="CASCADE"), nullable=False)
+    
+    # Relationships
+    possession = relationship("PossessionEvent", back_populates="play_possession_events")
+    play_event = relationship("PlayEvent")
 
 
 class LineupState(Base):
