@@ -12,7 +12,7 @@ from ..models.query_params import TeamStatsQuery
 from ..models.responses import TeamStatsResponse, StatisticalAnalysis
 from ..services.query_builder import TeamQueryBuilder
 from ..services.stats_analyzer import StatsAnalyzer
-from ..utils.database import get_db_manager, QueryExecutor, DatabaseManager
+from ...core.database import get_db_manager, QueryExecutor, UnifiedDatabaseManager as DatabaseManager
 
 router = APIRouter()
 
@@ -408,7 +408,7 @@ async def get_team_stats_by_id(
                 avg_query += f" AND tgs.home_away = ${avg_param_count}"
                 avg_params.append(home_away)
             
-            avg_results = await query_executor.db_manager.execute_query(avg_query, *avg_params)
+            avg_results = await query_executor.db_manager.execute_async_query(avg_query, *avg_params)
             if avg_results:
                 season_averages = avg_results[0]
         
@@ -453,7 +453,7 @@ async def search_teams(
         """
         
         search_term = f"%{query}%"
-        results = await query_executor.db_manager.execute_query(search_query, search_term, limit)
+        results = await query_executor.db_manager.execute_async_query(search_query, search_term, limit)
         
         return {
             "query": query,
@@ -484,7 +484,7 @@ async def get_teams_by_season(
         ORDER BY full_name
         """
         
-        results = await query_executor.db_manager.execute_query(search_query, season)
+        results = await query_executor.db_manager.execute_async_query(search_query, season)
         
         return {
             "season": season,
@@ -558,7 +558,7 @@ async def get_head_to_head_stats(
         
         query += " ORDER BY eg.game_date DESC"
         
-        games = await query_executor.db_manager.execute_query(query, *params)
+        games = await query_executor.db_manager.execute_async_query(query, *params)
         
         # Calculate summary statistics
         total_games = len(games)

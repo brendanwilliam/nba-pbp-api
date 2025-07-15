@@ -11,7 +11,7 @@ from ..models.query_params import LineupStatsQuery
 from ..models.responses import LineupStatsResponse, StatisticalAnalysis
 from ..services.query_builder import LineupQueryBuilder
 from ..services.stats_analyzer import StatsAnalyzer
-from ..utils.database import get_db_manager, QueryExecutor, DatabaseManager
+from ...core.database import get_db_manager, QueryExecutor, UnifiedDatabaseManager as DatabaseManager
 
 router = APIRouter()
 
@@ -167,8 +167,8 @@ async def get_lineup_stats(
             paginated_query = f"{lineup_query} LIMIT {limit} OFFSET {offset}"
             count_query = lineup_query.replace("SELECT lg.*, t.team_name, t.team_abbreviation", "SELECT COUNT(*)")
             
-            data = await query_executor.db_manager.execute_query(paginated_query, *params)
-            total_count = await query_executor.db_manager.execute_count_query(count_query, *params)
+            data = await query_executor.db_manager.execute_async_query(paginated_query, *params)
+            total_count = await query_executor.db_manager.execute_async_count_query(count_query, *params)
             
         else:
             # If no specific players specified, return general lineup statistics
@@ -340,7 +340,7 @@ async def get_common_lineups(
         LIMIT {limit}
         """
         
-        results = await query_executor.db_manager.execute_query(query, *params)
+        results = await query_executor.db_manager.execute_async_query(query, *params)
         
         return {
             "team_info": team_info,
@@ -450,7 +450,7 @@ async def get_player_combinations(
         # Update the first parameter to be the count of players
         params[0] = len(player_ids)
         
-        results = await query_executor.db_manager.execute_query(query, *params)
+        results = await query_executor.db_manager.execute_async_query(query, *params)
         
         # Calculate summary statistics
         total_games = len(results)

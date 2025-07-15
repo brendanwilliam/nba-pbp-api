@@ -5,17 +5,18 @@ Constructs complex SQL queries based on user parameters and filters.
 
 from typing import Dict, List, Any, Tuple, Optional
 import json
+from ...core.query_builder import UnifiedQueryBuilder, PlayerQueryBuilder, GameQueryBuilder, PlayQueryBuilder
 
 
-class QueryBuilder:
+class QueryBuilder(UnifiedQueryBuilder):
     """Dynamic query builder for constructing SQL queries with filters and joins"""
     
     def __init__(self, base_table: str):
-        self.base_table = base_table
+        super().__init__(base_table)
+        # Keep legacy parameter storage for backward compatibility
+        self.parameters = {}
         self.joins = []
         self.where_conditions = []
-        self.parameters = {}
-        self.param_counter = 1
     
     def _get_param_name(self) -> str:
         """Generate unique parameter name"""

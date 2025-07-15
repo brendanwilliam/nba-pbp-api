@@ -32,22 +32,22 @@ async def test_database_connection():
     try:
         # Test basic database connection
         print("\n1️⃣  Testing basic database connection...")
-        from src.api.utils.database import DatabaseManager
+        from src.core.database import get_db_manager
         
-        db_manager = DatabaseManager()
-        await db_manager.initialize()
+        db_manager = get_db_manager()
+        await db_manager.connect_async()
         print("✅ Database connection successful")
         
         # Test basic query
         print("\n2️⃣  Testing basic queries...")
         
         # Count players
-        result = await db_manager.execute_query("SELECT COUNT(*) as count FROM players")
+        result = await db_manager.execute_async_query("SELECT COUNT(*) as count FROM players")
         player_count = result[0]['count'] if result else 0
         print(f"✅ Found {player_count:,} players in database")
         
         # Count games  
-        result = await db_manager.execute_query("SELECT COUNT(*) as count FROM games") 
+        result = await db_manager.execute_async_query("SELECT COUNT(*) as count FROM games") 
         game_count = result[0]['count'] if result else 0
         print(f"✅ Found {game_count:,} games in database")
         
@@ -67,7 +67,7 @@ async def test_database_connection():
         LIMIT 1
         """
         
-        result = await db_manager.execute_query(query, ['%lebron%'])
+        result = await db_manager.execute_async_query(query, '%lebron%')
         if result:
             player_data = result[0]
             print(f"✅ Found player: {player_data['player_name']}")

@@ -15,8 +15,8 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from mcp.server import Server
 from mcp.types import Tool, TextContent, ImageContent, EmbeddedResource
 
-# Import existing core modules
-from api.utils.database import DatabaseManager as APIDatabase
+# Import unified database layer
+from core.database import get_async_db_manager
 
 # Import MCP-specific modules
 from .query_translator import NaturalLanguageQueryTranslator, QueryContext
@@ -47,9 +47,8 @@ class NBAMCPServer:
                 return
             
             try:
-                # Try to connect to real database
-                self.db_manager = APIDatabase()
-                await self.db_manager.connect()
+                # Try to connect to real database using unified database layer
+                self.db_manager = await get_async_db_manager()
                 print("✅ Connected to NBA database", file=sys.stderr)
             except Exception as e:
                 # Fall back to mock database
@@ -112,6 +111,8 @@ class NBAMCPServer:
                 # Default to LeBron for generic player queries
                 return mock_responses["lebron"]
         
+        # Add the same methods as UnifiedDatabaseManager for compatibility
+        mock_db.execute_async_query = smart_execute_query
         mock_db.execute_query = smart_execute_query
         return mock_db
     

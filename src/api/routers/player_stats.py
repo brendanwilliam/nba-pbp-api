@@ -12,7 +12,7 @@ from ..models.query_params import PlayerStatsQuery
 from ..models.responses import PlayerStatsResponse, StatisticalAnalysis
 from ..services.query_builder import PlayerQueryBuilder
 from ..services.stats_analyzer import StatsAnalyzer
-from ..utils.database import get_db_manager, QueryExecutor, DatabaseManager
+from ...core.database import get_db_manager, QueryExecutor, UnifiedDatabaseManager as DatabaseManager
 
 router = APIRouter()
 
@@ -373,7 +373,7 @@ async def search_players(
         """
         
         search_term = f"%{query}%"
-        results = await query_executor.db_manager.execute_query(search_query, search_term, limit)
+        results = await query_executor.db_manager.execute_async_query(search_query, search_term, limit)
         
         return {
             "query": query,

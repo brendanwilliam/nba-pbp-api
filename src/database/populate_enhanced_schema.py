@@ -20,7 +20,7 @@ import argparse
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 try:
-    from core.database import get_db
+    from core.database import get_db_manager
     from sqlalchemy import text, select, and_
     from sqlalchemy.orm import Session
     from sqlalchemy.exc import IntegrityError

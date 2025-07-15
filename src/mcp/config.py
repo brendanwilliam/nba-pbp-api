@@ -2,16 +2,22 @@
 NBA MCP Server Configuration
 
 Configuration settings and environment variables for the MCP server.
+DEPRECATED: Use core.config.get_mcp_config() instead.
 """
 
 import os
 from typing import Optional
 from dataclasses import dataclass
+from ..core.config import get_mcp_config, get_database_config, get_config
 
 
 @dataclass
 class MCPConfig:
-    """MCP Server configuration settings."""
+    """MCP Server configuration settings.
+    
+    DEPRECATED: Use core.config.MCPConfig instead.
+    This class is kept for backward compatibility.
+    """
     
     # Server settings
     server_name: str = "nba-pbp-server"
@@ -38,20 +44,34 @@ class MCPConfig:
     
     @classmethod
     def from_environment(cls) -> "MCPConfig":
-        """Create configuration from environment variables."""
+        """Create configuration from environment variables.
+        
+        DEPRECATED: Use core.config.get_mcp_config() instead.
+        """
+        # Use the unified configuration system
+        unified_config = get_config()
+        mcp_config = unified_config.mcp
+        db_config = unified_config.database
+        
         return cls(
-            database_url=os.getenv("DATABASE_URL"),
-            max_connections=int(os.getenv("MAX_DB_CONNECTIONS", "20")),
-            min_connections=int(os.getenv("MIN_DB_CONNECTIONS", "5")),
-            max_query_timeout=int(os.getenv("MAX_QUERY_TIMEOUT", "30")),
-            default_result_limit=int(os.getenv("DEFAULT_RESULT_LIMIT", "100")),
-            max_result_limit=int(os.getenv("MAX_RESULT_LIMIT", "1000")),
-            min_confidence_threshold=float(os.getenv("MIN_CONFIDENCE", "0.3")),
-            enable_fuzzy_matching=os.getenv("ENABLE_FUZZY_MATCHING", "true").lower() == "true",
-            log_level=os.getenv("LOG_LEVEL", "INFO"),
-            enable_query_logging=os.getenv("ENABLE_QUERY_LOGGING", "true").lower() == "true"
+            database_url=db_config.get_connection_url(),
+            max_connections=db_config.max_connections,
+            min_connections=db_config.min_connections,
+            max_query_timeout=mcp_config.max_query_timeout,
+            default_result_limit=100,  # Default value
+            max_result_limit=mcp_config.max_results,
+            min_confidence_threshold=0.3,  # Default value
+            enable_fuzzy_matching=True,  # Default value
+            log_level=unified_config.log_level,
+            enable_query_logging=mcp_config.enable_debug_logging
         )
 
 
-# Global configuration instance
+# Global configuration instance (deprecated)
 config = MCPConfig.from_environment()
+
+
+# New recommended way to get MCP configuration
+def get_mcp_server_config():
+    """Get MCP server configuration using unified config system"""
+    return get_mcp_config()

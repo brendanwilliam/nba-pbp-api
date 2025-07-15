@@ -10,7 +10,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from datetime import datetime
 
 from .routers import player_stats, team_stats, lineup_stats
-from .utils.database import startup_db, shutdown_db
+from core.database import startup_db, shutdown_db
 
 # Initialize FastAPI app
 app = FastAPI(

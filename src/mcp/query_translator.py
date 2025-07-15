@@ -7,30 +7,7 @@ Translates natural language queries into structured database queries.
 import re
 from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass
-from enum import Enum
-
-
-class QueryType(Enum):
-    PLAY_BY_PLAY = "play_by_play"
-    SHOT_CHART = "shot_chart"
-    PLAYER_PLAYS = "player_plays"
-    TEAM_PLAYS = "team_plays"
-    CLUTCH_PLAYS = "clutch_plays"
-    SHOT_ANALYSIS = "shot_analysis"
-    ASSIST_ANALYSIS = "assist_analysis"
-    DEFENSIVE_PLAYS = "defensive_plays"
-    GAME_FLOW = "game_flow"
-    TIME_SITUATION = "time_situation"
-    GAME_COUNT = "game_count"
-    PLAYER_STATS = "player_stats"
-    TEAM_STATS = "team_stats"
-    GAME_ANALYSIS = "game_analysis"
-    PLAYER_COMPARISON = "player_comparison"
-    TEAM_COMPARISON = "team_comparison"
-    HISTORICAL_QUERY = "historical_query"
-    SEASON_QUERY = "season_query"
-    PLAYOFF_QUERY = "playoff_query"
-    UNKNOWN = "unknown"
+from ..core.query_builder import QueryType, UnifiedQueryBuilder, PlayerQueryBuilder, GameQueryBuilder, PlayQueryBuilder
 
 
 @dataclass

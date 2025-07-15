@@ -284,7 +284,7 @@ python -c "from src.mcp.server import NBAMCPServer; print('OK')"
    echo $DATABASE_URL
    
    # Test connection
-   python -c "from src.api.utils.database import DatabaseManager; import asyncio; asyncio.run(DatabaseManager().initialize())"
+   python -c "from src.core.database import get_db_manager; import asyncio; asyncio.run(get_db_manager().connect_async())"
    ```
 
 2. **Low Query Confidence**
