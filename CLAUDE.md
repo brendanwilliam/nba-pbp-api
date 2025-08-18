@@ -4,10 +4,57 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is an NBA play-by-play data API project that scrapes game data from the official NBA website, stores it in PostgreSQL, and provides both REST API and MCP server interfaces for querying the data.
+This is a WNBA play-by-play data scraping and analytics project that extracts game data from the official WNBA website, stores it in PostgreSQL, and provides essential basketball analytics including possession and lineup tracking. The project focuses specifically on WNBA data collection and processing, without API or MCP server components.
 
-## Running Scripts/Code
-Make sure to activate the virtual environment before running any scripts. You can do this by running `source venv/bin/activate` in the root directory of the project.
+## Common Development Commands
+
+### Environment Setup
+```bash
+# Always activate virtual environment first
+source venv/bin/activate
+
+# Install/update dependencies
+pip install -r requirements.txt
+```
+
+### Testing
+```bash
+# Run all tests
+pytest
+
+# Run specific test file
+pytest tests/test_queue_offline.py
+
+# Run tests with verbose output
+pytest -v tests/
+```
+
+### Database Management
+```bash
+# Check database status (local WNBA database)
+python -m src.database.database_stats --local
+
+# Run Alembic migrations
+alembic upgrade head
+
+# Generate new migration
+alembic revision --autogenerate -m "description"
+
+# Database synchronization commands (see Database Management section below)
+python -m src.database.selective_sync --analyze
+```
+
+### WNBA Data Scraping
+```bash
+# Build game URL queue for WNBA seasons
+python -m src.scripts.build_game_url_queue
+
+# Test scraping system offline
+python -m tests.test_queue_offline
+
+# Run mass scraping (use with caution)
+python -m src.scripts.mass_game_scraper
+```
 
 ## Claude Code Guidelines
 - Before writing code, write your plan to `instructions/` as a markdown file. After writing the plan, write your code to a branch that has the same name as the plan.
@@ -22,12 +69,12 @@ The project follows a modular architecture with completed and planned components
 
 ### Completed Components ✅
 
-- **src/scrapers/**: Web scraping logic for NBA.com game data
-  - `team_mapping.py`: NBA team abbreviation mapping with historical changes (relocations, name changes)
-  - `game_url_generator.py`: URL discovery and generation system for all seasons 1996-2025
+- **src/scrapers/**: Web scraping logic for WNBA.com game data
+  - `team_mapping.py`: WNBA team abbreviation mapping with historical changes (relocations, name changes)
+  - `game_url_generator.py`: URL discovery and generation system for WNBA seasons
   - `url_validator.py`: URL accessibility and content validation with concurrent processing
-  - `game_data_scraper.py`: JSON data extraction from `#__NEXT_DATA__` script tags
-  - `scraping_manager.py`: Coordinated scraping operations with queue management
+  - `mass_data_extractor.py`: JSON data extraction from `#__NEXT_DATA__` script tags
+  - `mass_scraping_queue.py`: Coordinated scraping operations with queue management
 
 - **src/core/**: Core business logic and data models
   - `database.py`: Unified database connection and session management (sync/async support)
@@ -37,16 +84,16 @@ The project follows a modular architecture with completed and planned components
 
 - **src/database/**: Database schema and queue management
   - `queue_schema.sql`: Enhanced scraping queue structure with comprehensive indexing
-  - `enhanced_schema.sql`: Comprehensive normalized database schema for NBA game data
+  - `enhanced_schema.sql`: Comprehensive normalized database schema for WNBA game data
   - `queue_manager.py`: Queue operations, status tracking, and progress monitoring
   - `database_stats.py`: Comprehensive database statistics and monitoring tool (CLI + module)
-  - `database_comparison.py`: Compare schemas and data between local and cloud databases
+  - `selective_sync.py`: Efficient table-by-table synchronization between databases
   - `synchronise_databases.py`: Full database synchronization from local to cloud with migrations
 
 - **src/data_quality/**: Data validation and quality assurance
-  - `validation_framework.py`: Comprehensive validation framework for NBA JSON data
+  - `validation_framework.py`: Comprehensive validation framework for WNBA JSON data
 
-- **src/analytics/**: Advanced basketball analytics and tracking systems
+- **src/analytics/**: Essential basketball analytics and tracking systems
   - `possession_tracking.py`: Complete possession-by-possession analysis system
   - `lineup_tracking.py`: Real-time player on/off tracking for any game moment
 
@@ -62,39 +109,29 @@ The project follows a modular architecture with completed and planned components
   - `retrieve_identified_gaps.py`: Active retrieval of missing games from gap analysis
   - `mass_game_scraper.py`: Concurrent mass scraping with worker threads and rate limiting
 
-### In Progress Components 🔄
+### Focus Areas 🎯
 
-- **src/api/**: RESTful API endpoints for querying scraped data
-  - FastAPI application framework with authentication and rate limiting
-  - Database integration and comprehensive query endpoints
-  - Statistical analysis and performance optimization
-
-- **src/mcp/**: Model Context Protocol server for LLM integration
-  - Natural language query processing for NBA data
-  - Integration with database query system
-
-### Planned Components 📋
-
-- **Docker Infrastructure**: Multi-service containerized deployment
-  - Separate API and MCP containers with Nginx load balancing
-  - Development and production configurations with SSL termination
+This WNBA scraping project is streamlined to focus on:
+- **Data Collection**: Efficient scraping of WNBA.com game data
+- **Data Storage**: Normalized PostgreSQL database with comprehensive schema
+- **Essential Analytics**: Possession tracking and lineup analysis only
+- **Data Quality**: Validation and quality assurance for scraped data
 
 ### Database Infrastructure ✅
 
-- **PostgreSQL**: Enhanced normalized schema with 16 tables for comprehensive NBA data storage
-- **Data Volume**: 8,765+ games processed, 23.6M+ records across all tables
-- **Performance**: Sub-100ms query performance with strategic indexing
-- **Cloud Infrastructure**: Dual database strategy (local development, Neon cloud production)
+- **PostgreSQL**: Enhanced normalized schema with 16 tables for comprehensive WNBA data storage
+- **Database Name**: `wnba_pbp` (local development database)
+- **Performance**: Optimized with strategic indexing for basketball analytics
 - **Migration System**: Alembic-based schema versioning with selective sync tools
 - **Schema Documentation**: Complete table and column reference available in `src/database/README.md`
 
 ## Development Setup
 
-This is a Python project. When setting up:
+This is a Python project focused on WNBA data scraping. When setting up:
 
 1. Create and activate a virtual environment before any Python operations
-2. Database configuration will be needed for PostgreSQL connection
-3. The project will require web scraping libraries for NBA.com data extraction
+2. Database configuration will be needed for PostgreSQL connection (`wnba_pbp` database)
+3. The project requires web scraping libraries for WNBA.com data extraction
 
 ## Database Management
 
@@ -102,19 +139,15 @@ The project includes comprehensive database management tools for development and
 
 ### Key Commands
 ```bash
-# Monitor database statistics and progress
-python -m src.database.database_stats --local   # Local database
-python -m src.database.database_stats --neon    # Cloud database
-
-# Compare local and cloud databases for differences
-python -m src.database.database_comparison
+# Monitor database statistics and progress  
+python -m src.database.database_stats --local   # Local WNBA database
 
 # Selective synchronization (recommended for routine updates)
 python -m src.database.selective_sync --analyze --ignore-size    # Check differences
 python -m src.database.selective_sync --sync --dry-run --ignore-size  # Preview sync
 python -m src.database.selective_sync --sync raw_game_data       # Sync specific table
 
-# Full synchronization (for major updates)
+# Full synchronization (for major updates)  
 python -m src.database.synchronise_databases --dry-run  # Preview first
 python -m src.database.synchronise_databases            # Full deployment
 ```
@@ -122,7 +155,7 @@ python -m src.database.synchronise_databases            # Full deployment
 ### Development Workflow
 
 #### For Routine Updates (Recommended)
-1. **Develop locally** with full 23.6M+ row dataset in PostgreSQL
+1. **Develop locally** with WNBA dataset in PostgreSQL (`wnba_pbp` database)
 2. **Analyze differences** to see what changes need deployment:
    ```bash
    python -m src.database.selective_sync --analyze --ignore-size
@@ -137,15 +170,11 @@ python -m src.database.synchronise_databases            # Full deployment
    ```
 
 #### For Major Updates (Schema Changes)
-1. **Compare full databases** to see comprehensive differences:
-   ```bash
-   python -m src.database.database_comparison
-   ```
-2. **Preview full synchronization** with dry-run:
+1. **Preview full synchronization** with dry-run:
    ```bash
    python -m src.database.synchronise_databases --dry-run
    ```
-3. **Deploy to cloud** with full data and schema synchronization:
+2. **Deploy to target database** with full data and schema synchronization:
    ```bash
    python -m src.database.synchronise_databases
    ```
@@ -192,26 +221,26 @@ python -m src.database.selective_sync --sync --dry-run
 
 The full synchronization tool handles:
 - Alembic schema migrations
-- Complete data replacement (23.6M+ rows)
+- Complete data replacement with WNBA dataset
 - Sequence updates and foreign key constraints
 - Batch processing for large datasets
 - Error handling and rollback capabilities
 
 ## Key Implementation Details
 
-- The NBA.com game pages contain play-by-play data in a `#__NEXT_DATA__` script tag as JSON
-- Game URLs follow the pattern: `nba.com/game/{away_team}-vs-{home_team}-{game_id}`
-- The scraper needs to handle a queue system to track scraping status and manage the large volume of games (1996-2025)
-- The MCP server will translate natural language queries to database queries for LLM integration
+- The WNBA.com game pages contain play-by-play data in a `#__NEXT_DATA__` script tag as JSON (same structure as NBA)
+- Game URLs follow the pattern: `wnba.com/game/{away_team}-vs-{home_team}-{game_id}`
+- The scraper uses a queue system to track scraping status and manage WNBA games across seasons
+- Essential analytics focus on possession tracking and lineup analysis only
 
 ## Database Schema Reference
 
-**IMPORTANT**: When writing SQL queries for the API or MCP servers, always reference the complete database schema documentation in `src/database/README.md`. This file contains:
+**IMPORTANT**: When writing SQL queries or working with the database, always reference the complete database schema documentation in `src/database/README.md`. This file contains:
 
 - **Exact table names and column names** for all database tables
 - **Data types and constraints** for each column  
 - **Relationships and foreign keys** between tables
-- **Common query patterns** and example SQL queries
+- **Common query patterns** and example SQL queries for WNBA analytics
 - **Database views** available for simplified queries
 
 This prevents hallucination of non-existent tables or columns and ensures accurate SQL query generation.
@@ -247,22 +276,11 @@ Please use this section to keep track of high-level objectives and their status.
 - [x] **Gap Analysis & Data Quality**: Comprehensive coverage analysis and validation
 
 #### In Progress 🔄
-- [ ] **Plan 13**: REST API Development (Core framework completed, database integration in progress)
-- [ ] **Plan 14**: MCP Server Development (Planning phase, natural language queries for NBA data)
+- [ ] **Plan 1-1**: WNBA PBP Database Initialization (Current focus: WNBA data collection and analytics)
 
-#### Planned 📋
-
-**Documentation & Testing (Plans 15-16)**
-- [ ] **Plan 15**: Comprehensive API documentation and developer guides
-- [ ] **Plan 16**: Interactive testing website for API exploration
-
-**Business Development (Plans 17-21)**  
-- [ ] **Plan 17**: User acquisition and community building strategy
-- [ ] **Plan 18**: Monetization strategy with freemium pricing model
-- [ ] **Plan 19**: Infrastructure scaling for millions of users
-- [ ] **Plan 20**: Long-term maintenance and operations planning
-- [ ] **Plan 21**: Continuous updates and API evolution strategy
-
-**Expansion Opportunities**
-- [ ] **Plan 22**: WNBA data integration and expansion
+#### Future Opportunities 📋
+- [ ] **Enhanced Analytics**: Advanced WNBA-specific basketball metrics and insights
+- [ ] **Data Export**: Tools for exporting WNBA data in various formats
+- [ ] **Visualization**: Dashboard and reporting tools for WNBA analytics
+- [ ] **Historical Coverage**: Complete historical WNBA game data collection
 
