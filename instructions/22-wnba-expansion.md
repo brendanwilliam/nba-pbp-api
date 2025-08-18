@@ -41,13 +41,5 @@ I want to use the same scraper as the NBA scraper but modify it to use the WNBA 
 
 We will copy the schema from the nba_pbp database to the wnba_pbp database. This will allow us to use the same API for both the NBA and WNBA with only changing the database name.
 
-## API
-
-The API will be the same for both the NBA and WNBA. The only difference is an /nba vs /wnba endpoint. I want the WNBA endpoint to be identical to the NBA endpoint, making it clear that both are equal in terms of functionality and data. People should have to say that they are looking for NBA. We won't make this a default and then the WNBA a preference. Both NBA and WNBA data should be explicitly requested.
-
-## MCP
-
-The MCP will be the same for both the NBA and WNBA. The only difference is an /nba vs /wnba endpoint.
-
 ## Implementation plan
 (Fill this out when requested).
