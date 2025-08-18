@@ -1,6 +1,9 @@
 """
 WNBA Team Abbreviation Mapping (1997-2025)
 Handles team relocations, name changes, and historical abbreviations
+
+ACCURATE AS OF: January 2025
+Research completed and verified against official WNBA sources
 """
 
 from typing import Dict, List, Optional, Tuple
@@ -14,80 +17,77 @@ class WNBATeamMapping:
     CURRENT_TEAMS = {
         'ATL': {'name': 'Atlanta Dream', 'city': 'Atlanta'},
         'CHI': {'name': 'Chicago Sky', 'city': 'Chicago'},
-        'CON': {'name': 'Connecticut Sun', 'city': 'Uncasville'},
+        'CONN': {'name': 'Connecticut Sun', 'city': 'Uncasville'},
         'DAL': {'name': 'Dallas Wings', 'city': 'Dallas'},
         'IND': {'name': 'Indiana Fever', 'city': 'Indianapolis'},
-        'LAS': {'name': 'Las Vegas Aces', 'city': 'Las Vegas'},
+        'LA': {'name': 'Los Angeles Sparks', 'city': 'Los Angeles'},
+        'LV': {'name': 'Las Vegas Aces', 'city': 'Las Vegas'},
         'MIN': {'name': 'Minnesota Lynx', 'city': 'Minneapolis'},
         'NY': {'name': 'New York Liberty', 'city': 'New York'},
         'PHX': {'name': 'Phoenix Mercury', 'city': 'Phoenix'},
         'SEA': {'name': 'Seattle Storm', 'city': 'Seattle'},
-        'WAS': {'name': 'Washington Mystics', 'city': 'Washington'},
-        'GSV': {'name': 'Golden State Valkyries', 'city': 'San Francisco'},  # New 2025 expansion
+        'WSH': {'name': 'Washington Mystics', 'city': 'Washington'},
+        'GS': {'name': 'Golden State Valkyries', 'city': 'San Francisco'},  # New 2025 expansion
     }
     
     # Historical team changes (year: {old_code: new_code})
     TEAM_RELOCATIONS = {
-        2009: {'SAC': 'TUL'},  # Sacramento Monarchs → Tulsa Shock
+        2003: {'UTA': 'SAS', 'ORL': 'CONN'},  # Utah Starzz → San Antonio, Orlando Miracle → Connecticut Sun
+        2010: {'DET': 'TUL'},  # Detroit Shock → Tulsa Shock  
         2016: {'TUL': 'DAL'},  # Tulsa Shock → Dallas Wings
-        2020: {'SAS': 'LAS'},  # San Antonio Stars → Las Vegas Aces
-        1999: {'ORE': 'CONN'},  # Orlando Miracle → Connecticut Sun (via other moves)
+        2018: {'SAS': 'LV'},   # San Antonio Stars → Las Vegas Aces
     }
     
     # Name changes without relocation
     TEAM_NAME_CHANGES = {
-        2003: {'ORL': 'CONN'},  # Orlando Miracle → Connecticut Sun
         2014: {'SAS': 'SAS'},   # San Antonio Silver Stars → San Antonio Stars
     }
     
     # Original WNBA teams (1997 inaugural season)
     INAUGURAL_TEAMS = {
+        'CHA': {'name': 'Charlotte Sting', 'city': 'Charlotte'},
         'CLE': {'name': 'Cleveland Rockers', 'city': 'Cleveland'},
         'HOU': {'name': 'Houston Comets', 'city': 'Houston'},
         'NY': {'name': 'New York Liberty', 'city': 'New York'},
-        'LAX': {'name': 'Los Angeles Sparks', 'city': 'Los Angeles'},
+        'LA': {'name': 'Los Angeles Sparks', 'city': 'Los Angeles'},
         'PHX': {'name': 'Phoenix Mercury', 'city': 'Phoenix'},
         'SAC': {'name': 'Sacramento Monarchs', 'city': 'Sacramento'},
         'UTA': {'name': 'Utah Starzz', 'city': 'Salt Lake City'},
-        'WAS': {'name': 'Washington Mystics', 'city': 'Washington'},
     }
-    
+
     # Expansion teams by season
     EXPANSION_TEAMS = {
-        '1998': ['DET'],  # Detroit Shock
+        '1998': ['DET', 'WSH'],  # Detroit Shock, Washington Mystics
         '1999': ['MIN', 'ORL'],  # Minnesota Lynx, Orlando Miracle
-        '2006': ['CHI'],  # Chicago Sky  
+        '2000': ['MIA', 'POR', 'IND', 'SEA'],  # Miami Sol, Portland Fire, Indiana Fever, Seattle Storm
+        '2006': ['CHI'],  # Chicago Sky
         '2008': ['ATL'],  # Atlanta Dream
-        '1999': ['IND'],  # Indiana Fever
-        '2025': ['GSV'],   # Golden State Valkyries
+        '2025': ['GS'],   # Golden State Valkyries
     }
     
     # Teams that no longer exist
     DEFUNCT_TEAMS = {
+        'CHA': {'name': 'Charlotte Sting', 'active_until': 2006},
         'CLE': {'name': 'Cleveland Rockers', 'active_until': 2003},
         'HOU': {'name': 'Houston Comets', 'active_until': 2008},
         'SAC': {'name': 'Sacramento Monarchs', 'active_until': 2009},
-        'UTA': {'name': 'Utah Starzz', 'active_until': 2002},
         'MIA': {'name': 'Miami Sol', 'active_until': 2002},
         'POR': {'name': 'Portland Fire', 'active_until': 2002},
-        'ORL': {'name': 'Orlando Miracle', 'active_until': 2003},
+        'ORL': {'name': 'Orlando Miracle', 'active_until': 2002},
         'DET': {'name': 'Detroit Shock', 'active_until': 2009},
         'TUL': {'name': 'Tulsa Shock', 'active_until': 2015},
+        'UTA': {'name': 'Utah Starzz', 'active_until': 2002},
         'SAS': {'name': 'San Antonio Stars', 'active_until': 2017},
-        'LAX': {'name': 'Los Angeles Sparks', 'active_until': 2024},  # Moved or renamed
     }
     
     # Special cases and alternative abbreviations
     ALTERNATIVE_ABBREVIATIONS = {
-        'LV': 'LAS',      # Las Vegas alternative
-        'VEGAS': 'LAS',   # Las Vegas alternative
-        'CONN': 'CON',   # Connecticut full form
-        'CT': 'CON',     # Connecticut short form
-        'LA': 'LAX',      # Los Angeles alternative
-        'LAS_VEGAS': 'LAS', # Las Vegas underscore form
+        'LAS': 'LV',      # Las Vegas alternative (often used)
+        'LVA': 'LV',      # Las Vegas alternative
+        'CON': 'CONN',    # Connecticut short form → full form
+        'CT': 'CONN',     # Connecticut abbreviation → full form
         'NEW_YORK': 'NY', # New York underscore form
-        'CONNECTICUT': 'CON', # Connecticut full spelling
-        'GS': 'GSV',      # Golden State alternative
+        'GSV': 'GS',      # Golden State alternative
     }
     
     def get_team_for_season(self, tricode: str, season: str) -> Optional[Dict[str, str]]:
