@@ -64,10 +64,20 @@ async def quick_test():
         }]
         server.db_manager = mock_db
         
-        # Test natural language query
-        result = await server._handle_natural_language_query("LeBron James stats")
+        # Test natural language query through play processor
+        import os
+        os.environ['USE_MOCK_DATA'] = 'true'
+        
+        # Initialize the server's database
+        await server._initialize_database()
+        
+        # Test the play processor directly
+        response_text = await server.play_processor.process_play_query(
+            "LeBron James stats", 
+            server.db_manager
+        )
         print("   ✅ Natural language query processed")
-        print(f"   📝 Response preview: {result[0].text[:80]}...")
+        print(f"   📝 Response preview: {response_text[:80]}...")
         
         # Test 4: Server startup verification
         print("\n4️⃣  Testing server startup...")

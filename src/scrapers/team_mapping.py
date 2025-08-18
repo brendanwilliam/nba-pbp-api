@@ -1,5 +1,5 @@
 """
-NBA Team Abbreviation Mapping (1996-2025)
+WNBA Team Abbreviation Mapping (1997-2025)
 Handles team relocations, name changes, and historical abbreviations
 """
 
@@ -7,83 +7,87 @@ from typing import Dict, List, Optional, Tuple
 from datetime import datetime
 
 
-class NBATeamMapping:
-    """Comprehensive NBA team abbreviation mapping with historical changes."""
+class WNBATeamMapping:
+    """Comprehensive WNBA team abbreviation mapping with historical changes."""
     
-    # Current NBA teams (2024-25 season)
+    # Current WNBA teams (2024-25 season)
     CURRENT_TEAMS = {
-        'ATL': {'name': 'Atlanta Hawks', 'city': 'Atlanta'},
-        'BOS': {'name': 'Boston Celtics', 'city': 'Boston'},
-        'BKN': {'name': 'Brooklyn Nets', 'city': 'Brooklyn'},
-        'CHA': {'name': 'Charlotte Hornets', 'city': 'Charlotte'},
-        'CHI': {'name': 'Chicago Bulls', 'city': 'Chicago'},
-        'CLE': {'name': 'Cleveland Cavaliers', 'city': 'Cleveland'},
-        'DAL': {'name': 'Dallas Mavericks', 'city': 'Dallas'},
-        'DEN': {'name': 'Denver Nuggets', 'city': 'Denver'},
-        'DET': {'name': 'Detroit Pistons', 'city': 'Detroit'},
-        'GSW': {'name': 'Golden State Warriors', 'city': 'Golden State'},
-        'HOU': {'name': 'Houston Rockets', 'city': 'Houston'},
-        'IND': {'name': 'Indiana Pacers', 'city': 'Indiana'},
-        'LAC': {'name': 'LA Clippers', 'city': 'Los Angeles'},
-        'LAL': {'name': 'Los Angeles Lakers', 'city': 'Los Angeles'},
-        'MEM': {'name': 'Memphis Grizzlies', 'city': 'Memphis'},
-        'MIA': {'name': 'Miami Heat', 'city': 'Miami'},
-        'MIL': {'name': 'Milwaukee Bucks', 'city': 'Milwaukee'},
-        'MIN': {'name': 'Minnesota Timberwolves', 'city': 'Minnesota'},
-        'NOP': {'name': 'New Orleans Pelicans', 'city': 'New Orleans'},
-        'NYK': {'name': 'New York Knicks', 'city': 'New York'},
-        'OKC': {'name': 'Oklahoma City Thunder', 'city': 'Oklahoma City'},
-        'ORL': {'name': 'Orlando Magic', 'city': 'Orlando'},
-        'PHI': {'name': 'Philadelphia 76ers', 'city': 'Philadelphia'},
-        'PHX': {'name': 'Phoenix Suns', 'city': 'Phoenix'},
-        'POR': {'name': 'Portland Trail Blazers', 'city': 'Portland'},
-        'SAC': {'name': 'Sacramento Kings', 'city': 'Sacramento'},
-        'SAS': {'name': 'San Antonio Spurs', 'city': 'San Antonio'},
-        'TOR': {'name': 'Toronto Raptors', 'city': 'Toronto'},
-        'UTA': {'name': 'Utah Jazz', 'city': 'Utah'},
-        'WAS': {'name': 'Washington Wizards', 'city': 'Washington'},
+        'ATL': {'name': 'Atlanta Dream', 'city': 'Atlanta'},
+        'CHI': {'name': 'Chicago Sky', 'city': 'Chicago'},
+        'CON': {'name': 'Connecticut Sun', 'city': 'Uncasville'},
+        'DAL': {'name': 'Dallas Wings', 'city': 'Dallas'},
+        'IND': {'name': 'Indiana Fever', 'city': 'Indianapolis'},
+        'LAS': {'name': 'Las Vegas Aces', 'city': 'Las Vegas'},
+        'MIN': {'name': 'Minnesota Lynx', 'city': 'Minneapolis'},
+        'NY': {'name': 'New York Liberty', 'city': 'New York'},
+        'PHX': {'name': 'Phoenix Mercury', 'city': 'Phoenix'},
+        'SEA': {'name': 'Seattle Storm', 'city': 'Seattle'},
+        'WAS': {'name': 'Washington Mystics', 'city': 'Washington'},
+        'GSV': {'name': 'Golden State Valkyries', 'city': 'San Francisco'},  # New 2025 expansion
     }
     
     # Historical team changes (year: {old_code: new_code})
     TEAM_RELOCATIONS = {
-        2008: {'SEA': 'OKC'},  # Seattle SuperSonics → Oklahoma City Thunder
-        2012: {'NJN': 'BKN'},  # New Jersey Nets → Brooklyn Nets
-        2002: {'CHH': 'NOH'},  # Charlotte Hornets → New Orleans Hornets (original)
-        2013: {'NOH': 'NOP'},  # New Orleans Hornets → New Orleans Pelicans
-        2014: {'CHA': 'CHA'},  # Charlotte Bobcats → Charlotte Hornets (reclaimed)
-        2001: {'VAN': 'MEM'},  # Vancouver Grizzlies → Memphis Grizzlies
+        2009: {'SAC': 'TUL'},  # Sacramento Monarchs → Tulsa Shock
+        2016: {'TUL': 'DAL'},  # Tulsa Shock → Dallas Wings
+        2020: {'SAS': 'LAS'},  # San Antonio Stars → Las Vegas Aces
+        1999: {'ORE': 'CONN'},  # Orlando Miracle → Connecticut Sun (via other moves)
     }
     
     # Name changes without relocation
     TEAM_NAME_CHANGES = {
-        1997: {'WAS': 'WAS'},  # Washington Bullets → Washington Wizards
+        2003: {'ORL': 'CONN'},  # Orlando Miracle → Connecticut Sun
+        2014: {'SAS': 'SAS'},   # San Antonio Silver Stars → San Antonio Stars
+    }
+    
+    # Original WNBA teams (1997 inaugural season)
+    INAUGURAL_TEAMS = {
+        'CLE': {'name': 'Cleveland Rockers', 'city': 'Cleveland'},
+        'HOU': {'name': 'Houston Comets', 'city': 'Houston'},
+        'NY': {'name': 'New York Liberty', 'city': 'New York'},
+        'LAX': {'name': 'Los Angeles Sparks', 'city': 'Los Angeles'},
+        'PHX': {'name': 'Phoenix Mercury', 'city': 'Phoenix'},
+        'SAC': {'name': 'Sacramento Monarchs', 'city': 'Sacramento'},
+        'UTA': {'name': 'Utah Starzz', 'city': 'Salt Lake City'},
+        'WAS': {'name': 'Washington Mystics', 'city': 'Washington'},
     }
     
     # Expansion teams by season
     EXPANSION_TEAMS = {
-        '1988-89': ['CHA', 'MIA'],
-        '1989-90': ['ORL', 'MIN'],
-        '1995-96': ['TOR', 'VAN'],  # Vancouver later became Memphis
-        '2004-05': ['CHA'],  # Charlotte returned as Bobcats
+        '1998': ['DET'],  # Detroit Shock
+        '1999': ['MIN', 'ORL'],  # Minnesota Lynx, Orlando Miracle
+        '2006': ['CHI'],  # Chicago Sky  
+        '2008': ['ATL'],  # Atlanta Dream
+        '1999': ['IND'],  # Indiana Fever
+        '2025': ['GSV'],   # Golden State Valkyries
     }
     
     # Teams that no longer exist
     DEFUNCT_TEAMS = {
-        'SEA': {'name': 'Seattle SuperSonics', 'active_until': 2008},
-        'NJN': {'name': 'New Jersey Nets', 'active_until': 2012},
-        'NOH': {'name': 'New Orleans Hornets', 'active_until': 2013},
-        'VAN': {'name': 'Vancouver Grizzlies', 'active_until': 2001},
-        'NOK': {'name': 'New Orleans/Oklahoma City Hornets', 'active_until': 2007},  # Katrina relocation
-        'CHH': {'name': 'Charlotte Hornets', 'active_until': 2002},  # Original Charlotte Hornets
+        'CLE': {'name': 'Cleveland Rockers', 'active_until': 2003},
+        'HOU': {'name': 'Houston Comets', 'active_until': 2008},
+        'SAC': {'name': 'Sacramento Monarchs', 'active_until': 2009},
+        'UTA': {'name': 'Utah Starzz', 'active_until': 2002},
+        'MIA': {'name': 'Miami Sol', 'active_until': 2002},
+        'POR': {'name': 'Portland Fire', 'active_until': 2002},
+        'ORL': {'name': 'Orlando Miracle', 'active_until': 2003},
+        'DET': {'name': 'Detroit Shock', 'active_until': 2009},
+        'TUL': {'name': 'Tulsa Shock', 'active_until': 2015},
+        'SAS': {'name': 'San Antonio Stars', 'active_until': 2017},
+        'LAX': {'name': 'Los Angeles Sparks', 'active_until': 2024},  # Moved or renamed
     }
     
     # Special cases and alternative abbreviations
     ALTERNATIVE_ABBREVIATIONS = {
-        'BRK': 'BKN',  # Brooklyn alternative
-        'NOR': 'NOP',  # New Orleans alternative
-        'GS': 'GSW',   # Golden State alternative
-        'SA': 'SAS',   # San Antonio alternative
-        'NO': 'NOP',   # New Orleans short form
+        'LV': 'LAS',      # Las Vegas alternative
+        'VEGAS': 'LAS',   # Las Vegas alternative
+        'CONN': 'CON',   # Connecticut full form
+        'CT': 'CON',     # Connecticut short form
+        'LA': 'LAX',      # Los Angeles alternative
+        'LAS_VEGAS': 'LAS', # Las Vegas underscore form
+        'NEW_YORK': 'NY', # New York underscore form
+        'CONNECTICUT': 'CON', # Connecticut full spelling
+        'GS': 'GSV',      # Golden State alternative
     }
     
     def get_team_for_season(self, tricode: str, season: str) -> Optional[Dict[str, str]]:
@@ -135,6 +139,15 @@ class NBATeamMapping:
                     'defunct': True
                 }
         
+        # Check inaugural teams
+        if tricode in self.INAUGURAL_TEAMS:
+            return {
+                'tricode': tricode,
+                **self.INAUGURAL_TEAMS[tricode],
+                'season': season,
+                'inaugural': True
+            }
+        
         return None
     
     def get_all_teams_for_season(self, season: str) -> List[str]:
@@ -142,8 +155,11 @@ class NBATeamMapping:
         season_year = int(season.split('-')[0])
         active_teams = []
         
-        # Start with current teams
-        for tricode in self.CURRENT_TEAMS.keys():
+        # Start with current teams (excluding future expansions)
+        for tricode, info in self.CURRENT_TEAMS.items():
+            # Golden State Valkyries start in 2025
+            if tricode == 'GS' and season_year < 2025:
+                continue
             active_teams.append(tricode)
         
         # Add historical teams that were active in this season
@@ -151,22 +167,18 @@ class NBATeamMapping:
             if season_year <= info['active_until']:
                 active_teams.append(tricode)
         
+        # Add inaugural teams for early seasons
+        if season_year <= 1997:
+            for tricode in self.INAUGURAL_TEAMS.keys():
+                if tricode not in active_teams:
+                    active_teams.append(tricode)
+        
         # Remove teams that were relocated before this season
         for year, relocations in self.TEAM_RELOCATIONS.items():
             if season_year >= year:
                 for old_code in relocations.keys():
                     if old_code in active_teams:
                         active_teams.remove(old_code)
-        
-        # Special handling for Charlotte Hornets/Bobcats
-        if season_year >= 2014:
-            # Charlotte Hornets name reclaimed in 2014
-            if 'CHA' not in active_teams:
-                active_teams.append('CHA')
-        elif 2004 <= season_year < 2014:
-            # Charlotte Bobcats era (use CHA code for simplicity)
-            if 'CHA' not in active_teams:
-                active_teams.append('CHA')
         
         return sorted(active_teams)
     
@@ -207,12 +219,42 @@ class NBATeamMapping:
         if not history and current_tricode in self.CURRENT_TEAMS:
             history.append({
                 'tricode': current_tricode,
-                'years': "1996-present",  # Default assumption
+                'years': "1997-present",  # WNBA started in 1997
                 **self.CURRENT_TEAMS[current_tricode]
             })
         
         return history
+    
+    def get_season_info(self, season: str) -> Dict[str, any]:
+        """Get comprehensive season information including team count and major changes."""
+        season_year = int(season.split('-')[0])
+        teams = self.get_all_teams_for_season(season)
+        
+        # Identify major changes for this season
+        changes = []
+        for year, relocations in self.TEAM_RELOCATIONS.items():
+            if year == season_year:
+                for old_code, new_code in relocations.items():
+                    changes.append(f"{old_code} relocated to {new_code}")
+        
+        # Check for expansions
+        expansions = []
+        for expansion_season, new_teams in self.EXPANSION_TEAMS.items():
+            if expansion_season == str(season_year) or expansion_season == season:
+                expansions.extend(new_teams)
+        
+        return {
+            'season': season,
+            'team_count': len(teams),
+            'active_teams': teams,
+            'relocations': changes,
+            'expansions': expansions,
+            'wnba_age': season_year - 1997 + 1  # WNBA started in 1997
+        }
 
 
 # Global instance for easy access
-NBA_TEAMS = NBATeamMapping()
+WNBA_TEAMS = WNBATeamMapping()
+
+# Backwards compatibility alias
+NBA_TEAMS = WNBA_TEAMS  # For any legacy code that imports NBA_TEAMS

@@ -1,5 +1,5 @@
 """
-Unified configuration management for NBA Play-by-Play API and MCP server.
+Unified configuration management for WNBA Play-by-Play scraping and database system.
 Provides centralized configuration loading and validation.
 """
 
@@ -20,13 +20,13 @@ class DatabaseConfig:
     url: Optional[str] = None
     host: str = "localhost"
     port: int = 5432
-    database: str = "nba_pbp"
-    user: str = "postgres"
-    password: str = ""
+    database: str = "wnba_pbp"
+    user: str = "brendan"
+    password: str = "postgres"
     min_connections: int = 5
     max_connections: int = 20
     command_timeout: int = 60
-    application_name: str = "nba_unified_app"
+    application_name: str = "wnba_scraper_app"
     
     @classmethod
     def from_environment(cls) -> 'DatabaseConfig':
@@ -42,13 +42,13 @@ class DatabaseConfig:
             url=url,
             host=os.getenv('DB_HOST', 'localhost'),
             port=int(os.getenv('DB_PORT', '5432')),
-            database=os.getenv('DB_NAME', 'nba_pbp'),
-            user=os.getenv('DB_USER', 'postgres'),
-            password=os.getenv('DB_PASSWORD', ''),
+            database=os.getenv('DB_NAME', 'wnba_pbp'),
+            user=os.getenv('DB_USER', 'brendan'),
+            password=os.getenv('DB_PASSWORD', 'postgres'),
             min_connections=int(os.getenv('DB_MIN_CONNECTIONS', '5')),
             max_connections=int(os.getenv('DB_MAX_CONNECTIONS', '20')),
             command_timeout=int(os.getenv('DB_COMMAND_TIMEOUT', '60')),
-            application_name=os.getenv('DB_APPLICATION_NAME', 'nba_unified_app')
+            application_name=os.getenv('DB_APPLICATION_NAME', 'wnba_scraper_app')
         )
     
     def get_connection_url(self) -> str:
@@ -59,67 +59,13 @@ class DatabaseConfig:
 
 
 @dataclass
-class APIConfig:
-    """API server configuration settings"""
-    host: str = "0.0.0.0"
-    port: int = 8000
-    debug: bool = False
-    reload: bool = False
-    cors_origins: List[str] = None
-    api_key_required: bool = False
-    rate_limit_enabled: bool = True
-    rate_limit_requests: int = 100
-    rate_limit_period: int = 60
-    
-    def __post_init__(self):
-        if self.cors_origins is None:
-            self.cors_origins = ["*"]
-    
-    @classmethod
-    def from_environment(cls) -> 'APIConfig':
-        """Load API configuration from environment variables"""
-        cors_origins = os.getenv('CORS_ORIGINS', '*').split(',')
-        
-        return cls(
-            host=os.getenv('API_HOST', '0.0.0.0'),
-            port=int(os.getenv('API_PORT', '8000')),
-            debug=os.getenv('DEBUG', 'false').lower() == 'true',
-            reload=os.getenv('RELOAD', 'false').lower() == 'true',
-            cors_origins=cors_origins,
-            api_key_required=os.getenv('API_KEY_REQUIRED', 'false').lower() == 'true',
-            rate_limit_enabled=os.getenv('RATE_LIMIT_ENABLED', 'true').lower() == 'true',
-            rate_limit_requests=int(os.getenv('RATE_LIMIT_REQUESTS', '100')),
-            rate_limit_period=int(os.getenv('RATE_LIMIT_PERIOD', '60'))
-        )
-
-
-@dataclass
-class MCPConfig:
-    """MCP server configuration settings"""
-    use_mock_data: bool = False
-    max_query_timeout: int = 30
-    max_results: int = 1000
-    enable_debug_logging: bool = False
-    
-    @classmethod
-    def from_environment(cls) -> 'MCPConfig':
-        """Load MCP configuration from environment variables"""
-        return cls(
-            use_mock_data=os.getenv('USE_MOCK_DATA', 'false').lower() == 'true',
-            max_query_timeout=int(os.getenv('MCP_MAX_QUERY_TIMEOUT', '30')),
-            max_results=int(os.getenv('MCP_MAX_RESULTS', '1000')),
-            enable_debug_logging=os.getenv('MCP_DEBUG_LOGGING', 'false').lower() == 'true'
-        )
-
-
-@dataclass
 class ScrapingConfig:
     """Scraping configuration settings"""
     rate_limit_delay: float = 1.0
     max_retries: int = 3
     timeout: int = 30
     concurrent_workers: int = 5
-    user_agent: str = "NBA-PBP-Scraper/1.0"
+    user_agent: str = "WNBA-PBP-Scraper/1.0"
     
     @classmethod
     def from_environment(cls) -> 'ScrapingConfig':
@@ -129,17 +75,35 @@ class ScrapingConfig:
             max_retries=int(os.getenv('SCRAPING_MAX_RETRIES', '3')),
             timeout=int(os.getenv('SCRAPING_TIMEOUT', '30')),
             concurrent_workers=int(os.getenv('SCRAPING_CONCURRENT_WORKERS', '5')),
-            user_agent=os.getenv('SCRAPING_USER_AGENT', 'NBA-PBP-Scraper/1.0')
+            user_agent=os.getenv('SCRAPING_USER_AGENT', 'WNBA-PBP-Scraper/1.0')
+        )
+
+
+@dataclass
+class AnalyticsConfig:
+    """Analytics configuration settings"""
+    enable_possession_tracking: bool = True
+    enable_lineup_tracking: bool = True
+    possession_timeout_seconds: int = 24
+    lineup_change_buffer_seconds: int = 2
+    
+    @classmethod
+    def from_environment(cls) -> 'AnalyticsConfig':
+        """Load analytics configuration from environment variables"""
+        return cls(
+            enable_possession_tracking=os.getenv('ANALYTICS_POSSESSION_TRACKING', 'true').lower() == 'true',
+            enable_lineup_tracking=os.getenv('ANALYTICS_LINEUP_TRACKING', 'true').lower() == 'true',
+            possession_timeout_seconds=int(os.getenv('ANALYTICS_POSSESSION_TIMEOUT', '24')),
+            lineup_change_buffer_seconds=int(os.getenv('ANALYTICS_LINEUP_BUFFER', '2'))
         )
 
 
 @dataclass
 class UnifiedConfig:
-    """Unified configuration for the entire NBA PBP application"""
+    """Unified configuration for the entire WNBA PBP application"""
     database: DatabaseConfig
-    api: APIConfig
-    mcp: MCPConfig
     scraping: ScrapingConfig
+    analytics: AnalyticsConfig
     
     # Application-wide settings
     environment: str = "development"
@@ -151,9 +115,8 @@ class UnifiedConfig:
         """Load all configuration from environment variables"""
         return cls(
             database=DatabaseConfig.from_environment(),
-            api=APIConfig.from_environment(),
-            mcp=MCPConfig.from_environment(),
             scraping=ScrapingConfig.from_environment(),
+            analytics=AnalyticsConfig.from_environment(),
             environment=os.getenv('ENVIRONMENT', 'development'),
             log_level=os.getenv('LOG_LEVEL', 'INFO'),
             project_root=Path(os.getenv('PROJECT_ROOT', Path(__file__).parent.parent.parent))
@@ -198,7 +161,7 @@ class UnifiedConfig:
                     'level': self.log_level,
                     'propagate': False
                 },
-                'nba_pbp': {
+                'wnba_pbp': {
                     'handlers': ['default'],
                     'level': self.log_level,
                     'propagate': False
@@ -218,23 +181,16 @@ class UnifiedConfig:
         ]):
             errors.append("Database configuration incomplete: need URL or host/database/user")
         
-        # API validation
-        if self.api.port < 1 or self.api.port > 65535:
-            errors.append(f"Invalid API port: {self.api.port}")
-        
-        # MCP validation
-        if self.mcp.max_query_timeout < 1:
-            errors.append(f"Invalid MCP query timeout: {self.mcp.max_query_timeout}")
-        
-        if self.mcp.max_results < 1:
-            errors.append(f"Invalid MCP max results: {self.mcp.max_results}")
-        
         # Scraping validation
         if self.scraping.rate_limit_delay < 0:
             errors.append(f"Invalid scraping rate limit delay: {self.scraping.rate_limit_delay}")
         
         if self.scraping.max_retries < 0:
             errors.append(f"Invalid scraping max retries: {self.scraping.max_retries}")
+        
+        # Analytics validation
+        if self.analytics.possession_timeout_seconds < 1:
+            errors.append(f"Invalid possession timeout: {self.analytics.possession_timeout_seconds}")
         
         return errors
     
@@ -251,29 +207,18 @@ class UnifiedConfig:
                 'command_timeout': self.database.command_timeout,
                 'application_name': self.database.application_name
             },
-            'api': {
-                'host': self.api.host,
-                'port': self.api.port,
-                'debug': self.api.debug,
-                'reload': self.api.reload,
-                'cors_origins': self.api.cors_origins,
-                'api_key_required': self.api.api_key_required,
-                'rate_limit_enabled': self.api.rate_limit_enabled,
-                'rate_limit_requests': self.api.rate_limit_requests,
-                'rate_limit_period': self.api.rate_limit_period
-            },
-            'mcp': {
-                'use_mock_data': self.mcp.use_mock_data,
-                'max_query_timeout': self.mcp.max_query_timeout,
-                'max_results': self.mcp.max_results,
-                'enable_debug_logging': self.mcp.enable_debug_logging
-            },
             'scraping': {
                 'rate_limit_delay': self.scraping.rate_limit_delay,
                 'max_retries': self.scraping.max_retries,
                 'timeout': self.scraping.timeout,
                 'concurrent_workers': self.scraping.concurrent_workers,
                 'user_agent': self.scraping.user_agent
+            },
+            'analytics': {
+                'enable_possession_tracking': self.analytics.enable_possession_tracking,
+                'enable_lineup_tracking': self.analytics.enable_lineup_tracking,
+                'possession_timeout_seconds': self.analytics.possession_timeout_seconds,
+                'lineup_change_buffer_seconds': self.analytics.lineup_change_buffer_seconds
             },
             'environment': self.environment,
             'log_level': self.log_level,
@@ -312,19 +257,14 @@ def get_database_config() -> DatabaseConfig:
     return get_config().database
 
 
-def get_api_config() -> APIConfig:
-    """Get API configuration"""
-    return get_config().api
-
-
-def get_mcp_config() -> MCPConfig:
-    """Get MCP configuration"""
-    return get_config().mcp
-
-
 def get_scraping_config() -> ScrapingConfig:
     """Get scraping configuration"""
     return get_config().scraping
+
+
+def get_analytics_config() -> AnalyticsConfig:
+    """Get analytics configuration"""
+    return get_config().analytics
 
 
 # Environment variable helpers

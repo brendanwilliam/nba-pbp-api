@@ -1,81 +1,67 @@
 # Analytics Module
 
-**Status**: Planned for future development
+**Status**: Essential analytics implemented
 
-**Purpose**: This module will contain data analysis and insights generation components for the NBA play-by-play data once the scraping and database population phases are complete.
+**Purpose**: This module contains core analytical components for WNBA play-by-play data, focusing on essential tracking systems for possession and lineup analysis.
 
-## Planned Components
+## Implemented Components
 
-### Data Analysis
-- Statistical analysis of play-by-play data
-- Player performance metrics calculation
-- Team analytics and comparisons
-- Game flow analysis and momentum tracking
+### 1. Possession Tracking (`possession_tracker.py`)
+**Status**: ✅ Implemented
 
-### Insights Generation
-- Automated report generation
-- Trend identification across seasons
-- Performance pattern recognition
-- Clutch time analysis
+Real-time possession-by-possession analysis system that tracks:
+- Possession changes and ownership
+- Possession duration and efficiency
+- Offensive and defensive possessions
+- Shot clock tracking and resets
+- Turnover analysis
 
-### Visualization
-- Chart and graph generation for statistics
-- Dashboard components for web interface
-- Interactive data exploration tools
+**Key Features**:
+- Tracks possession changes based on game events (scores, rebounds, turnovers, fouls)
+- Calculates possession efficiency metrics
+- Handles special cases like offensive rebounds (14-second shot clock reset)
+- Provides foundation for offensive/defensive rating calculations
 
-## Current Status
+### 2. Lineup Tracking (`lineup_tracker.py`) 
+**Status**: ✅ Implemented
 
-This module is currently empty as it depends on:
-1. Completion of the NBA game data scraping (Plan 08)
-2. Implementation of the comprehensive database schema (Plans 09-10)
-3. Population of normalized database tables (Plan 11)
+Real-time player on/off court tracking system that provides:
+- Who is on the court at any given moment of any game
+- Lineup change detection and timing
+- Player substitution tracking
+- Lineup combination analytics
 
-The analytics components will be developed after the core data collection and storage infrastructure is fully operational.
+**Key Features**:
+- Tracks player entries and exits from the game
+- Maintains real-time lineup state throughout games
+- Enables lineup combination performance analysis
+- Supports plus/minus calculations for specific lineups
 
-## Upcoming features
+## Core Analytics Philosophy
 
-### 1. Lineup tracking
-We will use play-by-play data so we can track who is on the court at any given moment of any given game. This will allow us to create analytical profiles for lineup combinations.
+This module follows a **lean analytics approach**, focusing on fundamental basketball analysis rather than advanced statistical modeling. The emphasis is on:
 
-### 2. Score and score difference tracking
-By default, the play-by-play data only includes scores when there is a change in the score. This score difference allows us to track 'momentum' in the game and the rate of change of the score for each team.
+1. **Data Accuracy**: Precise tracking of game state and events
+2. **Real-time Analysis**: Moment-by-moment game tracking capabilities  
+3. **Foundation Building**: Creating solid base metrics for further analysis
+4. **WNBA Focus**: Adapted specifically for WNBA game structures and patterns
 
-#### Score velocity
-**Score velocity** is a calculation of the number of points a team has scored over the past 60 seconds. It is calculated as a rolling sum of the change in score over a window of time. We will use a window of 60 seconds for this calculation. The equation is as follows:
-```
-score_velocity = sum(team_score(t) - team_score(t-window_size))
-```
+## Technical Implementation
 
-#### Score momentum
-**Score momentum** is a calculation of the change in score over the past 60 seconds. It is calculated as a rolling sum of the change in score over a window of time. We will use a window of 60 seconds for this calculation. The equation is as follows:
-```
-score_momentum = sum(team_score(t) - team_score(t-window_size))
-```
+Both tracking systems are designed to:
+- Process play-by-play data in real-time or batch mode
+- Maintain game state consistency across all events
+- Handle edge cases and data anomalies gracefully
+- Provide clean, normalized output for database storage
+- Support both individual game analysis and season-wide aggregation
 
-#### Related statistics
-This calculation can be used to predict the likelihood of how much will each team score by the end of the game. We can use this to calculate the expected score and score difference at any given moment in the game.
+## Usage
 
-These statistics could have value to betters, analysts, and fans as it provides a way to use the play-by-play data to make predictions about the statistical outcome of a game. We could see towards the end of a game the maximum amount of points a team is capable of scoring or the likelihood of their momentum being overcome by the opposing team.
-
-For example, the Indiana Pacers in the 2025 playoffs have had multiple games that ESPN predicted to be >99% in favor of the Pacers' opponent in the final seconds. However, an analysis of Pacers' maximum score velocity and momentum would show what rate the Pacers are capable of scoring at and the likelihood of their momentum being enough to overcome the score difference at the end of the game.
-
-Part of this analysis is the ability to predict the likelihood of a comeback or to analyze how consistant a team is in their ability to score at a high rate. I imagine this analysis could help teams select players that have a high score velocity for situations that require a comeback. Furthermore, analysts would be able to provide an accurate risk assesment of a comeback sparking performance.
-
-### 3. Possession and shot clock tracking
-Arguably the most important statistics when comparing how good teams are aross eras is defensive and offensive efficiency. These statistics are calculated by tracking the number of points a team either scores or allows per possession.
-
-Possesion changes in basketball when one of the following occurs:
-- The offensive team scores (FGM)
-- The defensive team rebounds (DRB)
-- The offensive player commits a turnover (foul, out-of-bounds, loss of ball, or travel, etc.) (TO)
-- The defensive player commits a foul that results in a free throw (FT)
-
-In addition, we can calculate the shotclock time remaining by tracking either:
-- The time between a change of possession and the next shot attempt
-- The time between an offensive player's shot attempt and the next shot attempt
-
-Special cases:
-- Offensive rebounds reset the shotclock to 14 seconds
+These analytics components integrate directly with the WNBA scraping and database infrastructure:
+- Automatically process scraped game data
+- Store analytical results in the database
+- Provide foundation for query-based analysis
+- Support both historical and real-time game analysis
 
 
 
