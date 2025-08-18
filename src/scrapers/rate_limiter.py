@@ -1,5 +1,5 @@
 """
-Rate Limiter for Respectful NBA.com Scraping
+ORate Limiter for Respectful WNBA.com Scraping
 Implements dynamic rate limiting with backoff strategies
 """
 

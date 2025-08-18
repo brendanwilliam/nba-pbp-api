@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Mass NBA Game Scraper - Main orchestration script
-Implements the systematic scraping system from Plan 08
+Mass WNBA Game Scraper - Main orchestration script
+Implements the systematic scraping system for WNBA data
 """
 
 import asyncio

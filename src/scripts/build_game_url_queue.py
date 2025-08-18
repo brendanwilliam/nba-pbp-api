@@ -1,6 +1,6 @@
 """
 Build Game URL Queue Script
-Main script to discover and populate NBA game URLs for systematic scraping.
+Main script to discover and populate WNBA game URLs for systematic scraping.
 """
 
 import asyncio

@@ -17,7 +17,7 @@ class WNBATeamMapping:
     CURRENT_TEAMS = {
         'ATL': {'name': 'Atlanta Dream', 'city': 'Atlanta'},
         'CHI': {'name': 'Chicago Sky', 'city': 'Chicago'},
-        'CONN': {'name': 'Connecticut Sun', 'city': 'Uncasville'},
+        'CON': {'name': 'Connecticut Sun', 'city': 'Uncasville'},
         'DAL': {'name': 'Dallas Wings', 'city': 'Dallas'},
         'IND': {'name': 'Indiana Fever', 'city': 'Indianapolis'},
         'LA': {'name': 'Los Angeles Sparks', 'city': 'Los Angeles'},
@@ -32,7 +32,7 @@ class WNBATeamMapping:
     
     # Historical team changes (year: {old_code: new_code})
     TEAM_RELOCATIONS = {
-        2003: {'UTA': 'SAS', 'ORL': 'CONN'},  # Utah Starzz → San Antonio, Orlando Miracle → Connecticut Sun
+        2003: {'UTA': 'SAS', 'ORL': 'CON'},  # Utah Starzz → San Antonio, Orlando Miracle → Connecticut Sun
         2010: {'DET': 'TUL'},  # Detroit Shock → Tulsa Shock  
         2016: {'TUL': 'DAL'},  # Tulsa Shock → Dallas Wings
         2018: {'SAS': 'LV'},   # San Antonio Stars → Las Vegas Aces
@@ -84,8 +84,8 @@ class WNBATeamMapping:
     ALTERNATIVE_ABBREVIATIONS = {
         'LAS': 'LV',      # Las Vegas alternative (often used)
         'LVA': 'LV',      # Las Vegas alternative
-        'CON': 'CONN',    # Connecticut short form → full form
-        'CT': 'CONN',     # Connecticut abbreviation → full form
+        'CONN': 'CON',    # Connecticut full form → short form
+        'CT': 'CON',      # Connecticut abbreviation → short form
         'NEW_YORK': 'NY', # New York underscore form
         'GSV': 'GS',      # Golden State alternative
     }

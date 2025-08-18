@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Data Quality Validation Framework for NBA Game Data
+Data Quality Validation Framework for WNBA Game Data
 Based on comprehensive JSON structure analysis findings
 """
 

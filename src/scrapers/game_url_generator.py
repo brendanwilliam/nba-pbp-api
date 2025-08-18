@@ -1,6 +1,6 @@
 """
-NBA Game URL Generator
-Generates comprehensive queue of all NBA game URLs from 1996-2025
+WNBA Game URL Generator
+Generates comprehensive queue of all WNBA game URLs from 1997-2025
 """
 
 import asyncio
@@ -14,7 +14,7 @@ from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 import json
 
-from .team_mapping import NBA_TEAMS
+from .team_mapping import WNBA_TEAMS
 try:
     from ..core.database import get_db
 except ImportError:
@@ -45,42 +45,42 @@ class GameURLInfo:
 
 
 class GameURLGenerator:
-    """Generates NBA game URLs for systematic scraping."""
+    """Generates WNBA game URLs for systematic scraping."""
     
-    BASE_URL = "https://www.nba.com"
-    SCHEDULE_URL = "https://www.nba.com/games"
+    BASE_URL = "https://www.wnba.com"
+    SCHEDULE_URL = "https://www.wnba.com/games"
     
-    # Season date ranges with special handling for shortened seasons
+    # WNBA Season date ranges (typically May-October)
     SEASONS = {
-        "1996-97": ("1996-11-01", "1997-06-15"),
-        "1997-98": ("1997-11-01", "1998-06-15"),
-        "1998-99": ("1999-02-05", "1999-06-25"),  # Lockout shortened
-        "1999-00": ("1999-11-02", "2000-06-19"),
-        "2000-01": ("2000-10-31", "2001-06-15"),
-        "2001-02": ("2001-10-30", "2002-06-12"),
-        "2002-03": ("2002-10-29", "2003-06-15"),
-        "2003-04": ("2003-10-28", "2004-06-15"),
-        "2004-05": ("2004-11-02", "2005-06-23"),
-        "2005-06": ("2005-11-01", "2006-06-20"),
-        "2006-07": ("2006-10-31", "2007-06-14"),
-        "2007-08": ("2007-10-30", "2008-06-17"),
-        "2008-09": ("2008-10-28", "2009-06-14"),
-        "2009-10": ("2009-10-27", "2010-06-17"),
-        "2010-11": ("2010-10-26", "2011-06-12"),
-        "2011-12": ("2011-12-25", "2012-06-21"),  # Lockout shortened
-        "2012-13": ("2012-10-30", "2013-06-20"),
-        "2013-14": ("2013-10-29", "2014-06-15"),
-        "2014-15": ("2014-10-28", "2015-06-16"),
-        "2015-16": ("2015-10-27", "2016-06-19"),
-        "2016-17": ("2016-10-25", "2017-06-12"),
-        "2017-18": ("2017-10-17", "2018-06-08"),
-        "2018-19": ("2018-10-16", "2019-06-13"),
-        "2019-20": ("2019-10-22", "2020-10-11"),  # COVID extended
-        "2020-21": ("2020-12-22", "2021-07-20"),  # COVID adjusted
-        "2021-22": ("2021-10-19", "2022-06-16"),
-        "2022-23": ("2022-10-18", "2023-06-12"),
-        "2023-24": ("2023-10-17", "2024-06-17"),
-        "2024-25": ("2024-10-22", "2025-06-15"), # TODO: Update end date once season ends
+        "1997": ("1997-06-21", "1997-08-30"),  # Inaugural season
+        "1998": ("1998-05-30", "1998-09-02"),
+        "1999": ("1999-06-12", "1999-09-05"),
+        "2000": ("2000-05-20", "2000-08-26"),
+        "2001": ("2001-05-19", "2001-08-25"),
+        "2002": ("2002-05-25", "2002-08-31"),
+        "2003": ("2003-05-24", "2003-09-06"),
+        "2004": ("2004-05-20", "2004-09-18"),
+        "2005": ("2005-05-21", "2005-09-20"),
+        "2006": ("2006-05-20", "2006-09-09"),
+        "2007": ("2007-05-19", "2007-10-05"),
+        "2008": ("2008-05-17", "2008-10-02"),
+        "2009": ("2009-05-16", "2009-10-08"),
+        "2010": ("2010-05-15", "2010-09-16"),
+        "2011": ("2011-06-03", "2011-09-25"),
+        "2012": ("2012-05-18", "2012-10-21"),
+        "2013": ("2013-05-24", "2013-10-10"),
+        "2014": ("2014-05-16", "2014-09-07"),
+        "2015": ("2015-06-05", "2015-10-14"),
+        "2016": ("2016-05-14", "2016-10-20"),
+        "2017": ("2017-05-13", "2017-10-04"),
+        "2018": ("2018-05-11", "2018-09-12"),
+        "2019": ("2019-05-24", "2019-10-10"),
+        "2020": ("2020-07-25", "2020-10-06"),  # COVID delayed season
+        "2021": ("2021-05-14", "2021-10-17"),
+        "2022": ("2022-05-06", "2022-09-18"),
+        "2023": ("2023-05-19", "2023-10-18"),
+        "2024": ("2024-05-14", "2024-10-20"),
+        "2025": ("2025-05-16", "2025-10-12"),  # Estimated dates
     }
     
     def __init__(self, db_session: Optional[Session] = None):
@@ -106,7 +106,7 @@ class GameURLGenerator:
             await self.session.close()
             
     def generate_game_url(self, away_team: str, home_team: str, game_id: str) -> str:
-        """Generate NBA.com game URL from team codes and game ID."""
+        """Generate WNBA.com game URL from team codes and game ID."""
         return f"{self.BASE_URL}/game/{away_team.lower()}-vs-{home_team.lower()}-{game_id}"
     
     async def discover_season_games(self, season: str, batch_size: int = 10) -> List[GameURLInfo]:
@@ -254,8 +254,8 @@ class GameURLGenerator:
         game_id = match.group(3)
         
         # Validate team codes for the season
-        if not (NBA_TEAMS.validate_team_code(away_team, season) and 
-                NBA_TEAMS.validate_team_code(home_team, season)):
+        if not (WNBA_TEAMS.validate_team_code(away_team, season) and 
+                WNBA_TEAMS.validate_team_code(home_team, season)):
             logger.warning(f"Invalid team codes for {season}: {away_team} vs {home_team}")
             return None
         
@@ -338,8 +338,8 @@ class GameURLGenerator:
                 return None
             
             # Validate teams
-            if not (NBA_TEAMS.validate_team_code(away_team, season) and 
-                    NBA_TEAMS.validate_team_code(home_team, season)):
+            if not (WNBA_TEAMS.validate_team_code(away_team, season) and 
+                    WNBA_TEAMS.validate_team_code(home_team, season)):
                 return None
             
             # Generate URL
@@ -412,7 +412,7 @@ class GameURLGenerator:
             return None
         
         # Validate and create game info
-        if NBA_TEAMS.validate_team_code(away_team, season) and NBA_TEAMS.validate_team_code(home_team, season):
+        if WNBA_TEAMS.validate_team_code(away_team, season) and WNBA_TEAMS.validate_team_code(home_team, season):
             game_type = self._determine_game_type(game_date, season, game_id)
             priority = self._calculate_priority(season, game_type)
             
@@ -606,9 +606,9 @@ async def main():
         await generator.initialize()
         
         # Test with a single season first
-        games = await generator.discover_season_games("2024-25")
+        games = await generator.discover_season_games("2024")
         
-        logger.info(f"Discovered {len(games)} games for 2024-25 season")
+        logger.info(f"Discovered {len(games)} games for 2024 season")
         for game in games[:5]:  # Show first 5
             logger.info(f"Game: {game}")
             

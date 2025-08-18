@@ -1,4 +1,4 @@
-"""Database models for NBA play-by-play data."""
+"""Database models for WNBA play-by-play data."""
 
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, JSON, ForeignKey, Date, BigInteger
 from sqlalchemy.orm import relationship
@@ -7,23 +7,23 @@ from .database import Base
 
 
 class Team(Base):
-    """NBA team information."""
+    """WNBA team information."""
     __tablename__ = "teams"
     
     id = Column(Integer, primary_key=True, index=True)
-    tricode = Column(String(3), unique=True, index=True, nullable=False)  # e.g., "BOS", "LAL"
-    name = Column(String(100), nullable=False)  # e.g., "Boston Celtics"
-    city = Column(String(50), nullable=False)  # e.g., "Boston"
+    tricode = Column(String(3), unique=True, index=True, nullable=False)  # e.g., "CON", "LV"
+    name = Column(String(100), nullable=False)  # e.g., "Connecticut Sun"
+    city = Column(String(50), nullable=False)  # e.g., "Uncasville"
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
 
 class Player(Base):
-    """NBA player information."""
+    """WNBA player information."""
     __tablename__ = "players"
     
     id = Column(Integer, primary_key=True, index=True)
-    nba_id = Column(String(20), unique=True, index=True, nullable=False)  # NBA's player ID
+    wnba_id = Column(String(20), unique=True, index=True, nullable=False)  # WNBA's player ID
     first_name = Column(String(50), nullable=False)
     last_name = Column(String(50), nullable=False)
     jersey_number = Column(String(3))
@@ -36,15 +36,15 @@ class Player(Base):
 
 
 class Game(Base):
-    """NBA game information."""
+    """WNBA game information."""
     __tablename__ = "games"
     
     id = Column(Integer, primary_key=True, index=True)
-    nba_game_id = Column(String(20), unique=True, index=True, nullable=False)  # NBA's game ID
+    wnba_game_id = Column(String(20), unique=True, index=True, nullable=False)  # WNBA's game ID
     game_date = Column(Date, nullable=False, index=True)
     home_team_id = Column(Integer, ForeignKey("teams.id"), nullable=False)
     away_team_id = Column(Integer, ForeignKey("teams.id"), nullable=False)
-    season = Column(String(10), nullable=False, index=True)  # e.g., "2024-25"
+    season = Column(String(10), nullable=False, index=True)  # e.g., "2024"
     game_type = Column(String(20), nullable=False)  # "Regular Season", "Playoffs", etc.
     game_url = Column(String(500))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
