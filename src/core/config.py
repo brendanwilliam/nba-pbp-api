@@ -27,17 +27,17 @@ class DatabaseConfig:
     max_connections: int = 20
     command_timeout: int = 60
     application_name: str = "wnba_scraper_app"
-    
+
     @classmethod
     def from_environment(cls) -> 'DatabaseConfig':
         """Load database configuration from environment variables"""
         # Try different environment variable names in priority order
         url = (
-            os.getenv('DATABASE_URL') or 
+            os.getenv('DATABASE_URL') or
             os.getenv('NEON_DATABASE_URL') or
             os.getenv('POSTGRES_URL')
         )
-        
+
         return cls(
             url=url,
             host=os.getenv('DB_HOST', 'localhost'),
@@ -50,7 +50,7 @@ class DatabaseConfig:
             command_timeout=int(os.getenv('DB_COMMAND_TIMEOUT', '60')),
             application_name=os.getenv('DB_APPLICATION_NAME', 'wnba_scraper_app')
         )
-    
+
     def get_connection_url(self) -> str:
         """Get the database connection URL"""
         if self.url:
@@ -66,7 +66,7 @@ class ScrapingConfig:
     timeout: int = 30
     concurrent_workers: int = 5
     user_agent: str = "WNBA-PBP-Scraper/1.0"
-    
+
     @classmethod
     def from_environment(cls) -> 'ScrapingConfig':
         """Load scraping configuration from environment variables"""
@@ -86,7 +86,7 @@ class AnalyticsConfig:
     enable_lineup_tracking: bool = True
     possession_timeout_seconds: int = 24
     lineup_change_buffer_seconds: int = 2
-    
+
     @classmethod
     def from_environment(cls) -> 'AnalyticsConfig':
         """Load analytics configuration from environment variables"""
@@ -104,12 +104,12 @@ class UnifiedConfig:
     database: DatabaseConfig
     scraping: ScrapingConfig
     analytics: AnalyticsConfig
-    
+
     # Application-wide settings
     environment: str = "development"
     log_level: str = "INFO"
     project_root: Path = Path(__file__).parent.parent.parent
-    
+
     @classmethod
     def from_environment(cls) -> 'UnifiedConfig':
         """Load all configuration from environment variables"""
@@ -121,19 +121,19 @@ class UnifiedConfig:
             log_level=os.getenv('LOG_LEVEL', 'INFO'),
             project_root=Path(os.getenv('PROJECT_ROOT', Path(__file__).parent.parent.parent))
         )
-    
+
     def is_production(self) -> bool:
         """Check if running in production environment"""
         return self.environment.lower() == 'production'
-    
+
     def is_development(self) -> bool:
         """Check if running in development environment"""
         return self.environment.lower() == 'development'
-    
+
     def is_testing(self) -> bool:
         """Check if running in testing environment"""
         return self.environment.lower() == 'testing'
-    
+
     def get_log_config(self) -> Dict[str, Any]:
         """Get logging configuration dictionary"""
         return {
@@ -168,11 +168,11 @@ class UnifiedConfig:
                 }
             }
         }
-    
+
     def validate(self) -> List[str]:
         """Validate configuration and return list of validation errors"""
         errors = []
-        
+
         # Database validation
         if not self.database.url and not all([
             self.database.host, 
@@ -180,20 +180,20 @@ class UnifiedConfig:
             self.database.user
         ]):
             errors.append("Database configuration incomplete: need URL or host/database/user")
-        
+
         # Scraping validation
         if self.scraping.rate_limit_delay < 0:
             errors.append(f"Invalid scraping rate limit delay: {self.scraping.rate_limit_delay}")
-        
+
         if self.scraping.max_retries < 0:
             errors.append(f"Invalid scraping max retries: {self.scraping.max_retries}")
-        
+
         # Analytics validation
         if self.analytics.possession_timeout_seconds < 1:
             errors.append(f"Invalid possession timeout: {self.analytics.possession_timeout_seconds}")
-        
+
         return errors
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert configuration to dictionary for serialization"""
         return {
@@ -294,9 +294,9 @@ def get_env_list(key: str, default: Optional[List[str]] = None, separator: str =
     """Get list value from environment variable"""
     if default is None:
         default = []
-    
+
     value = os.getenv(key, separator.join(default))
     if not value:
         return default
-    
+
     return [item.strip() for item in value.split(separator) if item.strip()]
