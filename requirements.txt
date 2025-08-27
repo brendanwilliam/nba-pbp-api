@@ -11,9 +11,10 @@ alembic>=1.12.0
 # Environment and configuration
 python-dotenv>=1.0.0
 
-# Testing (core only)
-pytest>=7.4.0
-
 # Scraping utilities
 rich>=13.0.0
 backoff>=2.2.0
+
+# Testing
+pytest>=7.4.0
+pytest-cov>=4.1.0
