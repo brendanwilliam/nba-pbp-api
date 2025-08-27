@@ -2,7 +2,6 @@ import pytest
 import pandas as pd
 import json
 from unittest.mock import Mock, patch, mock_open, MagicMock
-from datetime import date
 from requests.exceptions import RequestException
 from bs4 import BeautifulSoup
 
@@ -17,34 +16,27 @@ class TestGameURLInfo:
         info = GameURLInfo(
             game_id="1029700001",
             season="1997",
-            game_date=date(1997, 6, 21),
-            home_team="NYL",
-            away_team="PHX",
             game_url="https://www.wnba.com/game/1029700001/playbyplay"
         )
         assert info.game_id == "1029700001"
         assert info.season == "1997"
+        assert info.game_url == "https://www.wnba.com/game/1029700001/playbyplay"
         assert info.game_type == "regular"  # default value
-        assert info.priority == 100  # default value
 
     def test_game_url_info_to_dict(self):
         """Test converting GameURLInfo to dictionary."""
         info = GameURLInfo(
             game_id="1029700001",
             season="1997",
-            game_date=date(1997, 6, 21),
-            home_team="NYL",
-            away_team="PHX",
             game_url="https://www.wnba.com/game/1029700001/playbyplay",
-            game_type="playoff",
-            priority=50
+            game_type="playoff"
         )
         result = info.to_dict()
         
         assert result['game_id'] == "1029700001"
-        assert result['game_date'] == "1997-06-21"  # ISO format
+        assert result['season'] == "1997"
+        assert result['game_url'] == "https://www.wnba.com/game/1029700001/playbyplay"
         assert result['game_type'] == "playoff"
-        assert result['priority'] == 50
 
 
 class TestGameURLGenerator:
@@ -155,7 +147,7 @@ class TestGameURLGenerator:
         game_ids = generator.generate_playoff_ids(2002)
         # Based on "3,5,7" best_of and "4,2,1" num_series
         # Round 1: 4 series × 3 games = 12 IDs
-        # Round 2: 2 series × 5 games = 10 IDs  
+        # Round 2: 2 series × 5 games = 10 IDs
         # Round 3: 1 series × 7 games = 7 IDs
         # Total: 29 IDs
         assert len(game_ids) == 29
@@ -195,6 +187,19 @@ class TestGameURLGenerator:
         # 473 regular (115+72+286) + 76 playoff (3+15+29+29) = 549 total
         assert len(urls) == 549
 
+    def test_generate_all_ids(self, generator):
+        """Test generating all IDs (regular + playoff)."""
+        # Based on our mock data: 
+        # Regular season: 1997(115) + 2020(72) + 2025(286) = 473
+        # Playoff: 1997(3) + 2001(15) + 2002(29) + 2025(29) = 76
+        # Total: 473 + 76 = 549
+        ids = generator.generate_all_ids()
+        assert len(ids) == 549
+        # Verify we have IDs from different seasons
+        assert any(id.startswith("10297") for id in ids)  # 1997
+        assert any(id.startswith("10320") for id in ids)  # 2020  
+        assert any(id.startswith("10325") for id in ids)  # 2025
+
     # Validation Tests
     @patch('requests.get')
     def test_validate_game_url_success(self, mock_get, generator):
@@ -202,7 +207,7 @@ class TestGameURLGenerator:
         mock_response = Mock()
         mock_response.raise_for_status.return_value = None
         mock_get.return_value = mock_response
-        
+
         result = generator.validate_game_url("https://www.wnba.com/game/1029700001/playbyplay")
         assert result is True
         mock_get.assert_called_once()
@@ -211,7 +216,7 @@ class TestGameURLGenerator:
     def test_validate_game_url_failure(self, mock_get, generator):
         """Test failed game URL validation."""
         mock_get.side_effect = RequestException("Network error")
-        
+
         result = generator.validate_game_url("https://www.wnba.com/game/invalid/playbyplay")
         assert result is False
 
@@ -293,8 +298,9 @@ class TestGameURLGenerator:
 
     def test_csv_file_constants(self, generator):
         """Test CSV file path constants."""
-        assert generator.GAMES_REGULAR_FP == "wnba-games-regular.csv"
-        assert generator.GAMES_PLAYOFF_FP == "wnba-games-playoff.csv"
+        # The file paths are now absolute paths, so check they end with the expected filenames
+        assert generator.GAMES_REGULAR_FP.endswith("wnba-games-regular.csv")
+        assert generator.GAMES_PLAYOFF_FP.endswith("wnba-games-playoff.csv")
 
     # Integration Tests
     def test_id_format_consistency(self, generator):

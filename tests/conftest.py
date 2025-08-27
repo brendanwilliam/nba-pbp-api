@@ -10,18 +10,7 @@ from datetime import date
 src_path = Path(__file__).parent.parent / "src"
 sys.path.insert(0, str(src_path))
 
-# Configure pytest markers to avoid warnings
-def pytest_configure(config):
-    """Configure pytest with custom markers."""
-    config.addinivalue_line(
-        "markers", "slow: marks tests as slow (deselect with '-m \"not slow\"')"
-    )
-    config.addinivalue_line(
-        "markers", "integration: marks tests as integration tests"
-    )
-    config.addinivalue_line(
-        "markers", "unit: marks tests as unit tests"
-    )
+# Markers are now configured in pytest.ini
 
 # Sample data fixtures for GameURLGenerator
 @pytest.fixture

@@ -2,7 +2,7 @@
 WNBA Game URL Generator
 Generates comprehensive queue of all WNBA game URLs from 1997-2025
 """
-
+import os
 import json
 import asyncio
 import aiohttp
@@ -22,24 +22,21 @@ from sqlalchemy import text
 
 logger = logging.getLogger(__name__)
 
+# Get the absolute path to the directory containing the script
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
 
 @dataclass
 class GameURLInfo:
     """Information about a game URL for the queue."""
     game_id: str
     season: str
-    game_date: date
-    home_team: str
-    away_team: str
     game_url: str
     game_type: str = 'regular'
-    priority: int = 100
     
     def to_dict(self) -> Dict:
         """Convert to dictionary for database insertion."""
-        data = asdict(self)
-        data['game_date'] = self.game_date.isoformat()
-        return data
+        return asdict(self)
 
 
 class GameURLGenerator:
@@ -47,8 +44,8 @@ class GameURLGenerator:
 
     BASE_URL = "https://www.wnba.com"
 
-    GAMES_REGULAR_FP = "wnba-games-regular.csv"
-    GAMES_PLAYOFF_FP = "wnba-games-playoff.csv"
+    GAMES_REGULAR_FP = os.path.join(SCRIPT_DIR, "wnba-games-regular.csv")
+    GAMES_PLAYOFF_FP = os.path.join(SCRIPT_DIR, "wnba-games-playoff.csv")
 
     def __init__(self, db_session: Optional[Session] = None):
         """Initialize generator with database session."""
@@ -146,7 +143,14 @@ class GameURLGenerator:
 
     def generate_all_ids(self):
         """Generate IDs for all seasons."""
-        return self.generate_regular_season_ids() + self.generate_playoff_ids()
+        ids = []
+        for season in self.regular_season_df['season'].unique():
+            ids.extend(self.generate_regular_season_ids(season))
+        for season in self.playoff_df['season'].unique():
+            ids.extend(self.generate_playoff_ids(season))
+
+        print(len(ids))
+        return ids
 
     def validate_game_url(self, game_url: str):
         """Validate a game URL."""
@@ -188,7 +192,7 @@ class GameURLGenerator:
         with open(fp, "w") as f:
             json.dump(game_data, f, indent=2)
 
-def main():
+def main():  # pragma: no cover
     """Example usage of the GameURLGenerator."""
     generator = GameURLGenerator()
 
@@ -240,10 +244,19 @@ def main():
         print(f"Valid game URLs: {num_valid}")
         print(f"Invalid game URLs: {num_invalid}")
 
+        # Generate regular season, playoff, and all game IDs
+        regular_season_game_urls = generator.generate_regular_season_game_urls()
+        playoff_game_urls = generator.generate_playoff_game_urls()
+        all_game_urls = generator.generate_all_ids()
+        print(f"Total regular season game IDs: {len(regular_season_game_urls)}")
+        print(f"Total playoff game IDs: {len(playoff_game_urls)}")
+        print(f"Total game IDs: {len(all_game_urls)}")
+        print(f"Sample game ID: {all_game_urls[0]}, {all_game_urls[-1]}")
+
     except Exception as e:
         logger.error(f"Error in main: {e}")
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     logging.basicConfig(level=logging.INFO)
     main()
