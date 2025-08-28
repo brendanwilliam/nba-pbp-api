@@ -8,14 +8,13 @@ The scraper will generate a queue of game URLs and extract raw game data for eac
 
 import os
 import logging
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Dict, Any
 from dataclasses import dataclass
 from datetime import datetime
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-from game_url_generator import GameURLGenerator
-from raw_data_extractor import RawDataExtractor
-from game_url_info import GameURLInfo
+from .game_url_generator import GameURLGenerator, GameURLInfo
+from .raw_data_extractor import RawDataExtractor, ExtractionMetadata
 
 logger = logging.getLogger(__name__)
 

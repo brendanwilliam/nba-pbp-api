@@ -18,8 +18,8 @@ def mock_regular_season_data():
     """Mock data for regular season CSV."""
     return pd.DataFrame({
         'season': [1997, 1998, 2020, 2025],
-        'total_regular_games': [115, 120, 72, 286],
-        'id_prefix': [10297, 10298, 10320, 10325]
+        'total_regular_games': [115, 120, 132, 286],
+        'id_prefix': [10297, 10298, 10220, 10225]
     })
 
 @pytest.fixture 
@@ -28,7 +28,7 @@ def mock_playoff_data():
     return pd.DataFrame({
         'season': [1997, 1998, 2001, 2002, 2025],
         'best_of': ["3", "3", "5", "3,5,7", "3,5,7"],
-        'id_prefix': [10297, 10298, 10301, 10302, 10325],
+        'id_prefix': [10297, 10298, 10301, 10302, 10225],
         'total_games': [3, 6, 15, None, None],
         'num_series': [None, None, None, "4,2,1", "4,2,1"]
     })
@@ -110,7 +110,7 @@ def temp_csv_files(tmp_path):
     regular_df = pd.DataFrame({
         'season': [1997, 2025],
         'total_regular_games': [115, 286], 
-        'id_prefix': [10297, 10325]
+        'id_prefix': [10297, 10225]
     })
     regular_df.to_csv(regular_season_csv, index=False)
     
@@ -118,7 +118,7 @@ def temp_csv_files(tmp_path):
     playoff_df = pd.DataFrame({
         'season': [1997, 2025],
         'best_of': ["3", "3,5,7"],
-        'id_prefix': [10297, 10325],
+        'id_prefix': [10297, 10225],
         'total_games': [3, None],
         'num_series': [None, "4,2,1"]
     })
@@ -174,6 +174,96 @@ def mock_db_session():
     session.all.return_value = []
     return session
 
+# Database-related fixtures for database module tests
+@pytest.fixture
+def mock_database_connection():
+    """Mock database connection for testing."""
+    from unittest.mock import Mock
+    connection = Mock()
+    connection.get_session.return_value = Mock()
+    connection.get_engine.return_value = Mock()
+    return connection
+
+@pytest.fixture
+def mock_database_service():
+    """Mock DatabaseService for testing."""
+    from unittest.mock import Mock
+    service = Mock()
+    service.game_data = Mock()
+    service.scraping_session = Mock()
+    return service
+
+@pytest.fixture
+def sample_raw_game_data():
+    """Sample RawGameData model instance for testing."""
+    from src.database.models import RawGameData
+    return RawGameData(
+        game_id=1029700001,
+        season=1997,
+        game_type="regular",
+        game_url="https://www.wnba.com/game/phx-vs-nyl-1029700001",
+        game_data={
+            "gameId": "1029700001",
+            "homeTeam": "NYL",
+            "awayTeam": "PHX",
+            "gameDate": "1997-06-21",
+            "playByPlay": [
+                {"period": 1, "time": "10:00", "description": "Game Start"}
+            ]
+        }
+    )
+
+@pytest.fixture
+def sample_scraping_session():
+    """Sample ScrapingSession model instance for testing."""
+    from src.database.models import ScrapingSession
+    return ScrapingSession(
+        session_name="Test Scraping Session",
+        status="running",
+        games_scraped=5,
+        errors_count=1
+    )
+
+@pytest.fixture
+def sample_database_version():
+    """Sample DatabaseVersion model instance for testing."""
+    from src.database.models import DatabaseVersion
+    return DatabaseVersion(
+        version="1.0.0",
+        description="Initial database schema"
+    )
+
+@pytest.fixture
+def in_memory_database():
+    """Create an in-memory SQLite database for testing."""
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from tests.test_models_sqlite import SqliteTestBase
+    
+    # Use SQLite with JSON support (not JSONB)
+    engine = create_engine('sqlite:///:memory:', echo=False)
+    
+    # Create tables with SQLite-compatible schema
+    SqliteTestBase.metadata.create_all(engine)
+    SessionLocal = sessionmaker(bind=engine)
+    session = SessionLocal()
+    
+    yield session
+    
+    session.close()
+
+@pytest.fixture
+def mock_environment_variables():
+    """Mock environment variables for database testing."""
+    import os
+    return {
+        'DB_NAME': 'test_wnba',
+        'DB_USER': 'test_user', 
+        'DB_PASSWORD': 'test_password',
+        'DB_HOST': 'localhost',
+        'DB_PORT': '5432'
+    }
+
 # Set up logging for tests
 @pytest.fixture(autouse=True)
 def setup_logging():
@@ -183,3 +273,4 @@ def setup_logging():
     # Suppress some noisy loggers during testing
     logging.getLogger('urllib3').setLevel(logging.WARNING)
     logging.getLogger('requests').setLevel(logging.WARNING)
+    logging.getLogger('alembic').setLevel(logging.WARNING)

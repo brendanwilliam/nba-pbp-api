@@ -72,7 +72,7 @@ class GameURLGenerator:
         for i in range(1, total_games + 1):
             if season == 2020:
                 # Game ID will be a 5 digit number starting with 1
-                game_ids.append(id_prefix + "1" + str(i).zfill(4))
+                game_ids.append(id_prefix + "01" + str(i).zfill(3))
             else:
                 game_ids.append(id_prefix + str(i).zfill(5))
         return game_ids
@@ -87,11 +87,14 @@ class GameURLGenerator:
 
         # Big split between game IDs from 1997-2001, and 2002-Present
         if season < 2002:
-            # Get total playoff games
-            total_playoff_games = df_row['total_games'].values[0]
-
-            # Generate game IDs
-            for i in range(1, total_playoff_games + 1):
+            id_range_by_season = {
+                1997: "3",
+                1998: "9",
+                1999: "11",
+                2000: "21",
+                2001: "21",
+            }
+            for i in range(1, id_range_by_season[season] + 1):
                 game_ids.append(id_prefix + str(i).zfill(5))
 
             return game_ids

@@ -31,14 +31,15 @@ pytest -v tests/
 
 ### Database Management
 ```bash
-# Check database status (local WNBA database)
-python -m src.database.database_stats --local
+# Database setup and migrations (recommended approach)
+python -m src.database.database            # Create DB, run migrations, test connection
+python -m src.database.database migrate    # Create DB and run migrations only
+python -m src.database.database status     # Check migration status
+python -m src.database.database create     # Create database only
 
-# Run Alembic migrations
-alembic upgrade head
-
-# Generate new migration
-alembic revision --autogenerate -m "description"
+# Direct Alembic commands (advanced usage)
+alembic revision --autogenerate -m "description"  # Generate new migration
+alembic upgrade head                               # Apply migrations directly
 
 # Database synchronization commands (see Database Management section below)
 python -m src.database.selective_sync --analyze
@@ -76,38 +77,18 @@ The project follows a modular architecture with completed and planned components
   - `mass_data_extractor.py`: JSON data extraction from `#__NEXT_DATA__` script tags
   - `mass_scraping_queue.py`: Coordinated scraping operations with queue management
 
-- **src/core/**: Core business logic and data models
-  - `database.py`: Unified database connection and session management (sync/async support)
-  - `models.py`: SQLAlchemy models for teams, games, players, queue management
-  - `query_builder.py`: Consolidated query builder system with statistical analysis
-  - `config.py`: Centralized configuration management
-
-- **src/database/**: Database schema and queue management
-  - `queue_schema.sql`: Enhanced scraping queue structure with comprehensive indexing
-  - `enhanced_schema.sql`: Comprehensive normalized database schema for WNBA game data
+- **src/database/**: Database layer with modern ORM architecture
+  - `database.py`: Database creation, Alembic migration management, and CLI interface
+  - `models.py`: SQLAlchemy ORM models (RawGameData with JSONB, ScrapingSession, DatabaseVersion)  
+  - `services.py`: Service layer for clean database operations with context management
   - `queue_manager.py`: Queue operations, status tracking, and progress monitoring
   - `database_stats.py`: Comprehensive database statistics and monitoring tool (CLI + module)
   - `selective_sync.py`: Efficient table-by-table synchronization between databases
   - `synchronise_databases.py`: Full database synchronization from local to cloud with migrations
 
-- **src/data_quality/**: Data validation and quality assurance
-  - `validation_framework.py`: Comprehensive validation framework for WNBA JSON data
-
 - **src/analytics/**: Essential basketball analytics and tracking systems
-  - `possession_tracking.py`: Complete possession-by-possession analysis system
-  - `lineup_tracking.py`: Real-time player on/off tracking for any game moment
-
-- **src/scripts/**: Execution scripts and utilities (continued)
-  - `json_structure_analyzer.py`: JSON structure analysis across all seasons
 
 - **src/scripts/**: Execution scripts and utilities
-  - `build_game_url_queue.py`: Main script for URL queue generation and management
-  - `test_queue_offline.py`: Comprehensive testing framework for all components
-  - `comprehensive_coverage_report.py`: Gap analysis across all game types and eras
-  - `verify_game_id_sequences.py`: Regular season sequence coverage verification
-  - `verify_playoff_sequences.py`: Playoff tournament structure validation
-  - `retrieve_identified_gaps.py`: Active retrieval of missing games from gap analysis
-  - `mass_game_scraper.py`: Concurrent mass scraping with worker threads and rate limiting
 
 ### Focus Areas 🎯
 
@@ -119,78 +100,52 @@ This WNBA scraping project is streamlined to focus on:
 
 ### Database Infrastructure ✅
 
-- **PostgreSQL**: Enhanced normalized schema with 16 tables for comprehensive WNBA data storage
-- **Database Name**: `wnba_pbp` (local development database)
-- **Performance**: Optimized with strategic indexing for basketball analytics
-- **Migration System**: Alembic-based schema versioning with selective sync tools
-- **Schema Documentation**: Complete table and column reference available in `src/database/README.md`
+- **PostgreSQL**: Modern ORM-based schema with SQLAlchemy models
+- **Database Name**: `wnba` (local development database)  
+- **Core Tables**: `raw_game_data` (JSONB), `scraping_sessions`, `database_versions`
+- **Migration System**: Alembic with automated database creation and version management
+- **Service Layer**: Context-managed database operations through `services.py`
+- **Performance**: JSONB indexing for efficient game data queries
+
+## Database Service Layer Architecture
+
+The project uses a clean service layer pattern for database operations:
+
+### Core Components
+- **`DatabaseService`**: Main coordinator with context management
+- **`GameDataService`**: Handles raw game data CRUD operations  
+- **`ScrapingSessionService`**: Manages scraping session tracking
+
+### Usage Patterns
+```python
+# Simple operations
+from src.database.services import insert_scraped_game
+success = insert_scraped_game(game_id, season, game_type, url, data)
+
+# Complex operations with context management
+from src.database.services import DatabaseService
+with DatabaseService() as db:
+    game = db.game_data.get_game_data(game_id)
+    session = db.scraping_session.start_session("My Session")
+```
+
+### Key Benefits
+- **Automatic session management** with context managers
+- **Error handling and rollback** built-in
+- **Type-safe operations** with proper validation
+- **Clean separation** between data access and business logic
 
 ## Development Setup
 
 This is a Python project focused on WNBA data scraping. When setting up:
 
 1. Create and activate a virtual environment before any Python operations
-2. Database configuration will be needed for PostgreSQL connection (`wnba_pbp` database)
+2. Database configuration will be needed for PostgreSQL connection (environment variables)
 3. The project requires web scraping libraries for WNBA.com data extraction
 
 ## Database Management
 
 The project includes comprehensive database management tools for development and deployment:
-
-### Key Commands
-```bash
-# Monitor database statistics and progress  
-python -m src.database.database_stats --local   # Local WNBA database
-
-# Selective synchronization (recommended for routine updates)
-python -m src.database.selective_sync --analyze --ignore-size    # Check differences
-python -m src.database.selective_sync --sync --dry-run --ignore-size  # Preview sync
-python -m src.database.selective_sync --sync raw_game_data       # Sync specific table
-
-# Full synchronization (for major updates)  
-python -m src.database.synchronise_databases --dry-run  # Preview first
-python -m src.database.synchronise_databases            # Full deployment
-```
-
-### Development Workflow
-
-#### For Routine Updates (Recommended)
-1. **Develop locally** with WNBA dataset in PostgreSQL (`wnba_pbp` database)
-2. **Analyze differences** to see what changes need deployment:
-   ```bash
-   python -m src.database.selective_sync --analyze --ignore-size
-   ```
-3. **Preview selective sync** with dry-run to validate changes:
-   ```bash
-   python -m src.database.selective_sync --sync --dry-run --ignore-size
-   ```
-4. **Deploy specific changes** table by table:
-   ```bash
-   python -m src.database.selective_sync --sync raw_game_data teams
-   ```
-
-#### For Major Updates (Schema Changes)
-1. **Preview full synchronization** with dry-run:
-   ```bash
-   python -m src.database.synchronise_databases --dry-run
-   ```
-2. **Deploy to target database** with full data and schema synchronization:
-   ```bash
-   python -m src.database.synchronise_databases
-   ```
-
-### Database Synchronization Tools
-
-#### Selective Sync Tool (src/database/selective_sync.py)
-**Recommended for routine updates** - Efficient table-by-table synchronization
-
-**Key Features:**
-- Smart difference detection (schema, row count, significant size changes)
-- Auto-sync mode: Finds and syncs all different tables automatically
-- Manual sync: Sync specific tables only
-- Large table protection: Tables >1M rows require `--force` flag
-- Schema-only or data-only sync options
-- Comprehensive safety features with automatic backups
 
 **Common Usage Patterns:**
 ```bash

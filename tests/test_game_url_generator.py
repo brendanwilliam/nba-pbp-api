@@ -47,8 +47,8 @@ class TestGameURLGenerator:
         """Mock regular season DataFrame."""
         return pd.DataFrame({
             'season': [1997, 2020, 2025],
-            'total_regular_games': [115, 72, 286],
-            'id_prefix': [10297, 10320, 10325]
+            'total_regular_games': [115, 132, 286],
+            'id_prefix': [10297, 10220, 10225]
         }).astype({'season': 'int64', 'total_regular_games': 'int64', 'id_prefix': 'int64'})
 
     @pytest.fixture
@@ -57,7 +57,7 @@ class TestGameURLGenerator:
         df = pd.DataFrame({
             'season': [1997, 2001, 2002, 2025],
             'best_of': ["3", "5", "3,5,7", "3,5,7"],
-            'id_prefix': [10297, 10301, 10302, 10325],
+            'id_prefix': [10297, 10301, 10302, 10225],
             'total_games': [3, 15, None, None],
             'num_series': [None, None, "4,2,1", "4,2,1"]
         })
@@ -83,7 +83,7 @@ class TestGameURLGenerator:
 
     @pytest.mark.parametrize("game_id,expected_url", [
         ("1029700001", "https://www.wnba.com/game/1029700001/playbyplay"),
-        ("1032500150", "https://www.wnba.com/game/1032500150/playbyplay"),
+        ("1022500150", "https://www.wnba.com/game/1022500150/playbyplay"),
         ("1030200075", "https://www.wnba.com/game/1030200075/playbyplay"),
     ])
     def test_generate_game_url_multiple_ids(self, generator, game_id, expected_url):
@@ -122,17 +122,17 @@ class TestGameURLGenerator:
     def test_generate_regular_season_ids_2020(self, generator):
         """Test regular season ID generation for 2020 (special case)."""
         game_ids = generator.generate_regular_season_ids(2020)
-        assert len(game_ids) == 72
-        assert game_ids[0] == "1032010001"  # Special format for 2020
-        assert game_ids[-1] == "1032010072"
+        assert len(game_ids) == 132
+        assert game_ids[0] == "1022001001"  # Special format for 2020
+        assert game_ids[-1] == "1022001132"
         assert all(len(game_id) == 10 for game_id in game_ids)
 
     def test_generate_regular_season_ids_2025(self, generator):
         """Test regular season ID generation for 2025."""
         game_ids = generator.generate_regular_season_ids(2025)
         assert len(game_ids) == 286
-        assert game_ids[0] == "1032500001"
-        assert game_ids[-1] == "1032500286"  # prefix + zfill(5) of 286
+        assert game_ids[0] == "1022500001"
+        assert game_ids[-1] == "1022500286"  # prefix + zfill(5) of 286
 
     # Playoff ID Generation Tests
     def test_generate_playoff_ids_pre_2002(self, generator):
@@ -165,8 +165,8 @@ class TestGameURLGenerator:
     def test_generate_regular_season_game_urls_all_seasons(self, generator):
         """Test generating URLs for all regular seasons."""
         urls = generator.generate_regular_season_game_urls()
-        # 115 + 72 + 286 = 473 total games across all seasons
-        assert len(urls) == 473
+        # 115 + 132 + 286 = 533 total games across all seasons
+        assert len(urls) == 533
 
     def test_generate_playoff_game_urls_single_season(self, generator):
         """Test generating URLs for a single playoff season."""
@@ -184,21 +184,21 @@ class TestGameURLGenerator:
     def test_generate_all_urls(self, generator):
         """Test generating all URLs (regular + playoff)."""
         urls = generator.generate_all_urls()
-        # 473 regular (115+72+286) + 76 playoff (3+15+29+29) = 549 total
-        assert len(urls) == 549
+        # 533 regular (115+132+286) + 76 playoff (3+15+29+29) = 609 total
+        assert len(urls) == 609
 
     def test_generate_all_ids(self, generator):
         """Test generating all IDs (regular + playoff)."""
         # Based on our mock data: 
-        # Regular season: 1997(115) + 2020(72) + 2025(286) = 473
+        # Regular season: 1997(115) + 2020(132) + 2025(286) = 533
         # Playoff: 1997(3) + 2001(15) + 2002(29) + 2025(29) = 76
-        # Total: 473 + 76 = 549
+        # Total: 533 + 76 = 609
         ids = generator.generate_all_ids()
-        assert len(ids) == 549
+        assert len(ids) == 609
         # Verify we have IDs from different seasons
         assert any(id.startswith("10297") for id in ids)  # 1997
-        assert any(id.startswith("10320") for id in ids)  # 2020  
-        assert any(id.startswith("10325") for id in ids)  # 2025
+        assert any(id.startswith("10220") for id in ids)  # 2020  
+        assert any(id.startswith("10225") for id in ids)  # 2025
 
     # Validation Tests
     @patch('requests.get')
@@ -327,8 +327,8 @@ class TestGameURLGenerator:
 
     @pytest.mark.parametrize("season,expected_prefix", [
         (1997, "10297"),
-        (2020, "10320"), 
-        (2025, "10325")
+        (2020, "10220"), 
+        (2025, "10225")
     ])
     def test_id_prefix_by_season(self, generator, season, expected_prefix):
         """Test that correct ID prefixes are used for different seasons."""
@@ -348,10 +348,10 @@ class TestGameURLGeneratorPerformance:
         with patch('pandas.read_csv') as mock_read_csv:
             # Mock with minimal data for performance tests
             mock_regular_df = pd.DataFrame({
-                'season': [2025], 'total_regular_games': [286], 'id_prefix': [10325]
+                'season': [2025], 'total_regular_games': [286], 'id_prefix': [10225]
             })
             mock_playoff_df = pd.DataFrame({
-                'season': [2025], 'best_of': ["3,5,7"], 'id_prefix': [10325],
+                'season': [2025], 'best_of': ["3,5,7"], 'id_prefix': [10225],
                 'total_games': [None], 'num_series': ["4,2,1"]
             })
             mock_read_csv.side_effect = [mock_regular_df, mock_playoff_df]
