@@ -177,24 +177,20 @@ class TestGameURLGenerator:
     def test_generate_playoff_game_urls_all_seasons(self, generator):
         """Test generating URLs for all playoff seasons."""
         urls = generator.generate_playoff_game_urls()
-        # Calculate expected based on our mock data:
-        # 1997: 3 games, 2001: 15 games, 2002: 29 games, 2025: 29 games = 76 total
-        assert len(urls) == 76
+        # Expected based on mock data: 3+9+21+20+29 = 82 total playoff games
+        assert len(urls) == 82
 
     def test_generate_all_urls(self, generator):
         """Test generating all URLs (regular + playoff)."""
         urls = generator.generate_all_urls()
-        # 533 regular (115+132+286) + 76 playoff (3+15+29+29) = 609 total
-        assert len(urls) == 609
+        # Expected based on mock data: 533 regular + 82 playoff = 615 total games
+        assert len(urls) == 615
 
     def test_generate_all_ids(self, generator):
         """Test generating all IDs (regular + playoff)."""
-        # Based on our mock data: 
-        # Regular season: 1997(115) + 2020(132) + 2025(286) = 533
-        # Playoff: 1997(3) + 2001(15) + 2002(29) + 2025(29) = 76
-        # Total: 533 + 76 = 609
+        # Expected based on mock data: 533 regular + 82 playoff = 615 total games
         ids = generator.generate_all_ids()
-        assert len(ids) == 609
+        assert len(ids) == 615
         # Verify we have IDs from different seasons
         assert any(id.startswith("10297") for id in ids)  # 1997
         assert any(id.startswith("10220") for id in ids)  # 2020  

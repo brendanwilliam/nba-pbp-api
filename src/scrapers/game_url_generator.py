@@ -94,8 +94,17 @@ class GameURLGenerator:
                 "2000": 21,
                 "2001": 21,
             }
+            excluded_ids = [
+                "1040000015",
+                "1040000021",
+                "1040100012",
+                "1040100021"
+            ]
+
             for i in range(1, id_range_by_season[str(season)] + 1):
-                game_ids.append(id_prefix + str(i).zfill(5))
+                game_id = id_prefix + str(i).zfill(5)
+                if game_id not in excluded_ids:
+                    game_ids.append(game_id)
 
             return game_ids
         else:
