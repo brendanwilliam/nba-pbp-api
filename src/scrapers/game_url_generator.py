@@ -88,13 +88,13 @@ class GameURLGenerator:
         # Big split between game IDs from 1997-2001, and 2002-Present
         if season < 2002:
             id_range_by_season = {
-                1997: "3",
-                1998: "9",
-                1999: "11",
-                2000: "21",
-                2001: "21",
+                "1997": 3,
+                "1998": 9,
+                "1999": 11,
+                "2000": 21,
+                "2001": 21,
             }
-            for i in range(1, id_range_by_season[season] + 1):
+            for i in range(1, id_range_by_season[str(season)] + 1):
                 game_ids.append(id_prefix + str(i).zfill(5))
 
             return game_ids
