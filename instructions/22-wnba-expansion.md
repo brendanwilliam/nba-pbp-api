@@ -37,6 +37,9 @@ I want to use url 1 to find the page but save url 2 for the scraper to use. This
 
 I want to use the same scraper as the NBA scraper but modify it to use the WNBA URL pattern. If we need to make any changes to the scraper, we should do it in a way so that it can be used for both the NBA and WNBA based on a command line argument or inferring based on the URL pattern.
 
+
+
+
 ## Database
 
 We will copy the schema from the nba_pbp database to the wnba_pbp database. This will allow us to use the same API for both the NBA and WNBA with only changing the database name.
