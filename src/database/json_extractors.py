@@ -1,0 +1,299 @@
+"""
+JSON data extractors for converting raw game JSON into normalized table records.
+Each extractor handles one type of data transformation from the raw WNBA game data.
+"""
+
+from typing import Dict, List, Optional, Any
+from datetime import datetime
+import re
+
+
+class ArenaExtractor:
+    """Extract arena data from game JSON"""
+    
+    @staticmethod
+    def extract(game_json: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract arena data from .boxscore.arena"""
+        arena_data = game_json['boxscore']['arena']
+        
+        return {
+            'arena_id': arena_data['arenaId'],
+            'arena_city': arena_data.get('arenaCity'),
+            'arena_name': arena_data.get('arenaName'),
+            'arena_state': arena_data.get('arenaState'),
+            'arena_country': arena_data.get('arenaCountry'),
+            'arena_timezone': arena_data.get('arenaTimezone'),
+            'arena_postal_code': arena_data.get('arenaPostalCode') or None,
+            'arena_street_address': arena_data.get('arenaStreetAddress') or None
+        }
+
+
+class TeamExtractor:
+    """Extract team data from various teamId references in game JSON"""
+    
+    @staticmethod
+    def extract_teams_from_game(game_json: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Extract all unique teams from a game"""
+        teams = set()
+        boxscore = game_json['boxscore']
+        
+        # Home and away teams
+        home_team_id = boxscore['homeTeam']['teamId']
+        away_team_id = boxscore['awayTeam']['teamId']
+        
+        teams.add(home_team_id)
+        teams.add(away_team_id)
+        
+        # Teams from play-by-play data
+        if 'postGameData' in game_json and 'postPlayByPlayData' in game_json['postGameData']:
+            for period in game_json['postGameData']['postPlayByPlayData']:
+                for action in period.get('actions', []):
+                    if 'teamId' in action and action['teamId']:
+                        teams.add(action['teamId'])
+        
+        # Convert to list of dictionaries (basic structure - will need enhancement)
+        return [{'team_id': team_id} for team_id in teams if team_id]
+
+
+class GameExtractor:
+    """Extract game data from .boxscore"""
+    
+    @staticmethod
+    def extract(game_json: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract game data from .boxscore"""
+        boxscore = game_json['boxscore']
+        
+        # Parse game datetime
+        game_et = None
+        if 'gameEt' in boxscore and boxscore['gameEt']:
+            try:
+                game_et = datetime.fromisoformat(boxscore['gameEt'].replace('Z', '+00:00'))
+            except ValueError:
+                pass
+        
+        return {
+            'game_id': int(boxscore['gameId']),
+            'game_code': boxscore.get('gameCode'),
+            'arena_id': boxscore['arena']['arenaId'],
+            'game_et': game_et,
+            'game_sellout': bool(boxscore.get('sellout', 0)),
+            'home_team_id': boxscore['homeTeam']['teamId'],
+            'home_team_wins': boxscore['homeTeam'].get('teamWins'),
+            'home_team_losses': boxscore['homeTeam'].get('teamLosses'),
+            'away_team_id': boxscore['awayTeam']['teamId'],
+            'away_team_wins': boxscore['awayTeam'].get('teamWins'),
+            'away_team_losses': boxscore['awayTeam'].get('teamLosses'),
+            'game_duration': boxscore.get('duration'),
+            'game_label': boxscore.get('gameLabel'),
+            'game_attendance': boxscore.get('attendance')
+        }
+
+
+class PersonExtractor:
+    """Extract person data from players and officials"""
+    
+    @staticmethod
+    def extract_persons_from_game(game_json: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Extract all unique persons (players, officials) from a game"""
+        persons = {}
+        boxscore = game_json['boxscore']
+        
+        # Players from both teams
+        for team_key in ['homeTeam', 'awayTeam']:
+            if team_key in boxscore and 'players' in boxscore[team_key]:
+                for player in boxscore[team_key]['players']:
+                    person_id = player['personId']
+                    if person_id not in persons:
+                        persons[person_id] = {
+                            'person_id': person_id,
+                            'person_name': player.get('name'),
+                            'person_name_i': player.get('nameI'),
+                            'person_name_first': player.get('firstName'),
+                            'person_name_family': player.get('familyName')
+                        }
+        
+        # Officials
+        if 'officials' in boxscore:
+            for official in boxscore['officials']:
+                person_id = official['personId']
+                if person_id not in persons:
+                    persons[person_id] = {
+                        'person_id': person_id,
+                        'person_name': official.get('name'),
+                        'person_name_i': official.get('nameI'),
+                        'person_name_first': official.get('firstName'),
+                        'person_name_family': official.get('familyName')
+                    }
+        
+        # Persons from play-by-play data
+        if 'postGameData' in game_json and 'postPlayByPlayData' in game_json['postGameData']:
+            for period in game_json['postGameData']['postPlayByPlayData']:
+                for action in period.get('actions', []):
+                    person_id = action.get('personId')
+                    if person_id and person_id != 0 and person_id not in persons:
+                        persons[person_id] = {
+                            'person_id': person_id,
+                            'person_name': action.get('playerName'),
+                            'person_name_i': action.get('playerNameI'),
+                            'person_name_first': None,
+                            'person_name_family': None
+                        }
+        
+        return list(persons.values())
+
+
+class PlayExtractor:
+    """Extract play-by-play data from .postGameData.postPlayByPlayData"""
+    
+    @staticmethod
+    def extract_plays_from_game(game_json: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Extract all plays from a game"""
+        plays = []
+        game_id = int(game_json['boxscore']['gameId'])
+        
+        if 'postGameData' not in game_json or 'postPlayByPlayData' not in game_json['postGameData']:
+            return plays
+        
+        for period_data in game_json['postGameData']['postPlayByPlayData']:
+            period = period_data['period']
+            
+            for action in period_data.get('actions', []):
+                # Handle nullable personId (0 means no person)
+                person_id = action.get('personId')
+                if person_id == 0:
+                    person_id = None
+                
+                play_data = {
+                    'game_id': game_id,
+                    'person_id': person_id,
+                    'team_id': action.get('teamId'),
+                    'action_id': action.get('actionId'),
+                    'action_type': action.get('actionType'),
+                    'sub_type': action.get('subType'),
+                    'period': period,
+                    'clock': action.get('clock'),
+                    'x_legacy': action.get('xLegacy'),
+                    'y_legacy': action.get('yLegacy'),
+                    'location': action.get('location'),
+                    'score_away': action.get('scoreAway'),
+                    'score_home': action.get('scoreHome'),
+                    'shot_value': action.get('shotValue'),
+                    'shot_result': action.get('shotResult'),
+                    'description': action.get('description'),
+                    'is_field_goal': action.get('isFieldGoal', False),
+                    'points_total': action.get('pointsTotal'),
+                    'action_number': action.get('actionNumber'),
+                    'shot_distance': action.get('shotDistance')
+                }
+                
+                plays.append(play_data)
+        
+        return plays
+
+
+class BoxscoreExtractor:
+    """Extract boxscore statistics from .postGameData.postBoxscoreData"""
+    
+    # Mapping from API field names to database column names
+    STAT_MAPPING = {
+        'minutes': 'min',
+        'points': 'pts',
+        'reboundsTotal': 'reb',
+        'assists': 'ast',
+        'steals': 'stl',
+        'blocks': 'blk',
+        'plusMinusPoints': 'pm',
+        'fieldGoalsMade': 'fgm',
+        'fieldGoalsAttempted': 'fga',
+        'fieldGoalsPercentage': 'fgp',
+        'threePointersMade': 'tpm',
+        'threePointersAttempted': 'tpa',
+        'threePointersPercentage': 'tpp',
+        'freeThrowsMade': 'ftm',
+        'freeThrowsAttempted': 'fta',
+        'freeThrowsPercentage': 'ftp',
+        'turnovers': 'to',
+        'foulsPersonal': 'pf',
+        'reboundsOffensive': 'orebs',
+        'reboundsDefensive': 'drebs'
+    }
+    
+    @staticmethod
+    def extract_boxscores_from_game(game_json: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Extract all boxscore entries from a game"""
+        boxscores = []
+        game_id = int(game_json['boxscore']['gameId'])
+        
+        if 'postGameData' not in game_json or 'postBoxscoreData' not in game_json['postGameData']:
+            return boxscores
+        
+        boxscore_data = game_json['postGameData']['postBoxscoreData']
+        
+        # Process home and away team data
+        for team_type in ['homeTeam', 'awayTeam']:
+            if team_type not in boxscore_data:
+                continue
+                
+            team_data = boxscore_data[team_type]
+            home_away = 'h' if team_type == 'homeTeam' else 'a'
+            
+            # Team-level stats (starters and bench)
+            for box_type in ['starters', 'bench']:
+                if box_type in team_data:
+                    stats = team_data[box_type]
+                    boxscore_entry = BoxscoreExtractor._create_boxscore_entry(
+                        game_id=game_id,
+                        team_id=None,  # Will need to be resolved from team mapping
+                        person_id=None,
+                        home_away_team=home_away,
+                        box_type=box_type,
+                        stats=stats
+                    )
+                    boxscores.append(boxscore_entry)
+            
+            # Individual player stats
+            if 'players' in team_data:
+                for player_stats in team_data['players']:
+                    boxscore_entry = BoxscoreExtractor._create_boxscore_entry(
+                        game_id=game_id,
+                        team_id=None,  # Will need to be resolved
+                        person_id=player_stats.get('personId'),
+                        home_away_team=home_away,
+                        box_type='player',
+                        stats=player_stats
+                    )
+                    boxscores.append(boxscore_entry)
+        
+        return boxscores
+    
+    @staticmethod
+    def _create_boxscore_entry(game_id: int, team_id: Optional[int], person_id: Optional[int], 
+                              home_away_team: str, box_type: str, stats: Dict[str, Any]) -> Dict[str, Any]:
+        """Create a single boxscore entry from stats data"""
+        entry = {
+            'game_id': game_id,
+            'team_id': team_id,
+            'person_id': person_id,
+            'home_away_team': home_away_team,
+            'box_type': box_type
+        }
+        
+        # Map all known statistics
+        for api_field, db_column in BoxscoreExtractor.STAT_MAPPING.items():
+            value = stats.get(api_field)
+            
+            # Handle special cases
+            if api_field == 'minutes' and value:
+                # Keep as string for minutes format (e.g., "25:30")
+                entry[db_column] = str(value)
+            elif api_field == 'plusMinusPoints' and value is None:
+                # plusMinusPoints is only for players, null for team totals
+                entry[db_column] = None
+            elif api_field in ['fieldGoalsPercentage', 'threePointersPercentage', 'freeThrowsPercentage']:
+                # Convert percentage to float
+                entry[db_column] = float(value) if value is not None else None
+            else:
+                # Convert to int for count stats, None for missing
+                entry[db_column] = int(value) if value is not None else None
+        
+        return entry

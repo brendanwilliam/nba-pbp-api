@@ -12,6 +12,11 @@ sys.path.insert(0, str(src_path))
 
 # Markers are now configured in pytest.ini
 
+# Additional markers for table population tests
+def pytest_configure(config):
+    """Configure pytest with custom markers for table population"""
+    config.addinivalue_line("markers", "postgres: Tests requiring PostgreSQL database")
+
 # Sample data fixtures for GameURLGenerator
 @pytest.fixture
 def mock_regular_season_data():
@@ -274,3 +279,71 @@ def setup_logging():
     logging.getLogger('urllib3').setLevel(logging.WARNING)
     logging.getLogger('requests').setLevel(logging.WARNING)
     logging.getLogger('alembic').setLevel(logging.WARNING)
+
+
+# PostgreSQL test fixtures for table population
+@pytest.fixture
+def postgresql_url():
+    """Get PostgreSQL URL from environment or skip tests"""
+    import os
+    url = os.getenv('TEST_DATABASE_URL')
+    if not url:
+        pytest.skip("PostgreSQL tests require TEST_DATABASE_URL environment variable")
+    return url
+
+
+@pytest.fixture
+def postgresql_engine(postgresql_url):
+    """Create PostgreSQL engine for testing"""
+    from sqlalchemy import create_engine
+    from src.database.models import Base
+    
+    engine = create_engine(postgresql_url, echo=False)
+    
+    # Create all tables including JSONB ones
+    Base.metadata.create_all(engine)
+    
+    yield engine
+    
+    # Clean up - drop all tables
+    Base.metadata.drop_all(engine)
+    engine.dispose()
+
+
+@pytest.fixture
+def postgresql_session(postgresql_engine):
+    """Create PostgreSQL session for testing"""
+    from sqlalchemy.orm import sessionmaker
+    Session = sessionmaker(bind=postgresql_engine)
+    session = Session()
+    yield session
+    session.close()
+
+
+@pytest.fixture(scope="session")
+def sample_game_json():
+    """Load sample game JSON data (session-scoped for performance)"""
+    import json
+    from pathlib import Path
+    
+    test_data_dir = Path(__file__).parent / "test_data"
+    sample_file = test_data_dir / "raw_game_1022400005.json"
+    
+    with open(sample_file, 'r') as f:
+        return json.load(f)
+
+
+@pytest.fixture(scope="session")
+def all_sample_games():
+    """Load all sample game files"""
+    import json
+    from pathlib import Path
+    
+    test_data_dir = Path(__file__).parent / "test_data"
+    games = []
+    
+    for json_file in test_data_dir.glob("raw_game_*.json"):
+        with open(json_file, 'r') as f:
+            games.append(json.load(f))
+    
+    return games
