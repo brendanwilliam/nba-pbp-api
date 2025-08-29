@@ -327,11 +327,13 @@ class TestMainFunction:
     })
     @patch('src.database.database.create_database_if_not_exists')
     @patch('src.database.database.run_migrations')
+    @patch('src.database.database.verify_database_structure')
     @patch('src.database.database.psycopg2.connect')
-    def test_main_default_full_setup(self, mock_connect, mock_run_migrations, mock_create_db):
+    def test_main_default_full_setup(self, mock_connect, mock_verify_db, mock_run_migrations, mock_create_db):
         """Test default behavior (full setup)."""
         mock_create_db.return_value = True
         mock_run_migrations.return_value = True
+        mock_verify_db.return_value = True
         
         # Mock successful database connection
         mock_conn = Mock()
@@ -347,7 +349,7 @@ class TestMainFunction:
         
         # Verify success message
         print_calls = [str(call) for call in mock_print.call_args_list]
-        assert any('Connected to database successfully' in call for call in print_calls)
+        assert any('✅ Database connection successful' in call for call in print_calls)
     
     @patch('sys.argv', ['database.py'])
     @patch('src.database.database.create_database_if_not_exists')
@@ -363,9 +365,9 @@ class TestMainFunction:
         mock_create_db.assert_called_once()
         mock_run_migrations.assert_called_once()
         
-        # Should skip database connection test
+        # Should print migration failed message
         print_calls = [str(call) for call in mock_print.call_args_list]
-        assert any('Migration failed - skipping database connection test' in call for call in print_calls)
+        assert any('❌ Migration failed' in call for call in print_calls)
     
     @patch('sys.argv', ['database.py'])
     @patch('src.database.database.create_database_if_not_exists')
@@ -389,11 +391,13 @@ class TestMainFunction:
     })
     @patch('src.database.database.create_database_if_not_exists')
     @patch('src.database.database.run_migrations')
+    @patch('src.database.database.verify_database_structure')
     @patch('src.database.database.psycopg2.connect')
-    def test_main_default_connection_test_fails(self, mock_connect, mock_run_migrations, mock_create_db):
+    def test_main_default_connection_test_fails(self, mock_connect, mock_verify_db, mock_run_migrations, mock_create_db):
         """Test default behavior when final connection test fails."""
         mock_create_db.return_value = True
         mock_run_migrations.return_value = True
+        mock_verify_db.return_value = True
         mock_connect.side_effect = Exception("Connection failed")
         
         with patch('builtins.print') as mock_print:
@@ -405,7 +409,7 @@ class TestMainFunction:
         
         # Verify error message
         print_calls = [str(call) for call in mock_print.call_args_list]
-        assert any('Error connecting to database:' in call for call in print_calls)
+        assert any('❌ Database connection failed:' in call for call in print_calls)
 
 
 class TestEnvironmentVariables:
