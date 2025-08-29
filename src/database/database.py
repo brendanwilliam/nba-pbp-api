@@ -111,6 +111,88 @@ def run_migrations():
         print(f"Error running migrations: {e}")
         return False
 
+def verify_database_structure():
+    """Verify all required tables exist with proper structure"""
+    expected_tables = [
+        'raw_game_data', 'scraping_sessions', 'database_versions',
+        'arena', 'team', 'game', 'person', 'person_game', 'team_game', 
+        'play', 'boxscore', 'alembic_version'
+    ]
+    
+    try:
+        from src.database.services import DatabaseConnection
+        from sqlalchemy import text
+        
+        db_conn = DatabaseConnection()
+        with db_conn.get_session() as session:
+            result = session.execute(text(
+                "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name;"
+            ))
+            existing_tables = [row[0] for row in result]
+            
+            missing_tables = [table for table in expected_tables if table not in existing_tables]
+            
+            if missing_tables:
+                print(f"❌ Missing tables: {', '.join(missing_tables)}")
+                return False
+            else:
+                print(f"✅ All {len(expected_tables)} required tables exist")
+                
+            # Check key table structures
+            print("\n📋 Table verification:")
+            for table in ['arena', 'person', 'team']:
+                result = session.execute(text(f"SELECT column_name FROM information_schema.columns WHERE table_name = '{table}' AND column_name = 'id';"))
+                has_id = result.fetchone() is not None
+                print(f"  {table}: {'✅' if has_id else '❌'} has 'id' primary key")
+                
+            return True
+            
+    except Exception as e:
+        print(f"❌ Error verifying database structure: {e}")
+        return False
+
+def full_database_setup():
+    """Complete database setup for new developers"""
+    print("🚀 Starting complete database setup...")
+    
+    # Step 1: Create database
+    print("\n1️⃣ Creating database...")
+    if not create_database_if_not_exists():
+        print("❌ Database creation failed")
+        return False
+    
+    # Step 2: Run migrations
+    print("\n2️⃣ Running migrations...")
+    if not run_migrations():
+        print("❌ Migration failed")
+        return False
+    
+    # Step 3: Verify structure
+    print("\n3️⃣ Verifying database structure...")
+    if not verify_database_structure():
+        print("❌ Database verification failed")
+        return False
+    
+    # Step 4: Test connection
+    print("\n4️⃣ Testing database connection...")
+    try:
+        conn = psycopg2.connect(
+            database=os.getenv("DB_NAME"),
+            user=os.getenv("DB_USER"),
+            password=os.getenv("DB_PASSWORD"),
+            host=os.getenv("DB_HOST"),
+            port=os.getenv("DB_PORT")
+        )
+        conn.close()
+        print("✅ Database connection successful")
+    except Exception as e:
+        print(f"❌ Database connection failed: {e}")
+        return False
+    
+    print("\n🎉 Database setup completed successfully!")
+    print("Your WNBA scraping database is ready to use.")
+    return True
+
 def main():
     import sys
     
@@ -139,34 +221,30 @@ def main():
             create_database_if_not_exists()
             return
             
+        elif command == "verify":
+            # Verify database structure
+            verify_database_structure()
+            return
+            
+        elif command == "setup":
+            # Full setup for new developers
+            full_database_setup()
+            return
+            
         elif command == "help":
             print("Usage: python -m src.database.database [command]")
             print("Commands:")
             print("  (no args)  - Create database, run migrations, and test connection")
+            print("  setup      - Complete setup with verification (recommended for new developers)")
             print("  status     - Show current migration status")
             print("  migrate    - Create database and run migrations")
             print("  create     - Create database only")
+            print("  verify     - Verify all required tables exist")
             print("  help       - Show this help message")
             return
     
     # Default behavior: full setup
-    if create_database_if_not_exists():
-        # Run migrations after creating/connecting to database
-        if run_migrations():
-            try:
-                conn = psycopg2.connect(
-                    database=os.getenv("DB_NAME"),
-                    user=os.getenv("DB_USER"),
-                    password=os.getenv("DB_PASSWORD"),
-                    host=os.getenv("DB_HOST"),
-                    port=os.getenv("DB_PORT")
-                )
-                print("Connected to database successfully")
-                conn.close()
-            except Exception as e:
-                print(f"Error connecting to database: {e}")
-        else:
-            print("Migration failed - skipping database connection test")
+    full_database_setup()
 
 
 if __name__ == "__main__":
