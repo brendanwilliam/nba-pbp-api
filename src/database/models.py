@@ -62,6 +62,8 @@ class Arena(Base):
     arena_timezone = Column(String(50))
     arena_postal_code = Column(String(20))
     arena_street_address = Column(String(500))
+    first_used = Column(DateTime, nullable=True)
+    last_used = Column(DateTime, nullable=True)
     
     # Relationship
     games = relationship("Game", back_populates="arena")
@@ -81,6 +83,8 @@ class Person(Base):
     person_name_first = Column(String(100))
     person_name_family = Column(String(100))
     person_role = Column(String(20))
+    first_used = Column(DateTime, nullable=True)
+    last_used = Column(DateTime, nullable=True)
     
     # Relationships
     person_games = relationship("PersonGame", back_populates="person")
@@ -100,6 +104,8 @@ class Team(Base):
     team_city = Column(String(100))
     team_name = Column(String(100))
     team_tricode = Column(String(10))
+    first_used = Column(DateTime, nullable=True)
+    last_used = Column(DateTime, nullable=True)
     
     # Relationships
     team_games = relationship("TeamGame", back_populates="team")

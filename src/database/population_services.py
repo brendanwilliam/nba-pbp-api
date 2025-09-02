@@ -7,6 +7,7 @@ from typing import List, Dict, Any, Optional, Set
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.dialects.postgresql import insert
+from datetime import datetime
 import logging
 
 from .models import Arena, Team, Person, Game, TeamGame, PersonGame, Play, Boxscore
@@ -64,8 +65,12 @@ class BulkInsertService:
     def __init__(self, session: Session):
         self.session = session
     
-    def bulk_insert_arenas(self, arenas: List[Dict[str, Any]]) -> int:
-        """Bulk insert arenas with ON CONFLICT DO NOTHING"""
+    def bulk_insert_arenas(self, arenas: List[Dict[str, Any]], game_et: datetime) -> int:
+        """
+        Bulk insert arenas with value-based conflict detection and temporal tracking.
+        Only skips insertion if arena_id exists AND all values are identical.
+        Updates last_used for exact matches, creates new versions for different values.
+        """
         if not arenas:
             return 0
         
@@ -78,31 +83,79 @@ class BulkInsertService:
             return 0
         
         try:
-            # Check for existing arenas to avoid conflicts
-            arena_ids_to_check = [arena['arena_id'] for arena in valid_arenas]
-            existing_arenas = self.session.query(Arena.arena_id).filter(
-                Arena.arena_id.in_(arena_ids_to_check)
-            ).all()
-            existing_arena_ids = {arena.arena_id for arena in existing_arenas}
+            inserted_count = 0
+            updated_count = 0
             
-            # Filter out arenas that already exist
-            new_arenas = [
-                arena for arena in valid_arenas 
-                if arena['arena_id'] not in existing_arena_ids
-            ]
+            for arena_data in valid_arenas:
+                arena_id = arena_data['arena_id']
+                
+                # Find existing arenas with same arena_id
+                existing_arenas = self.session.query(Arena).filter_by(arena_id=arena_id).all()
+                
+                # Check if any existing arena has identical values
+                exact_match = None
+                for existing in existing_arenas:
+                    if self._arenas_match(existing, arena_data):
+                        exact_match = existing
+                        break
+                
+                if exact_match:
+                    # Update last_used timestamp only if this game is more recent
+                    # Handle timezone comparison carefully
+                    should_update = exact_match.last_used is None
+                    if not should_update and exact_match.last_used is not None:
+                        try:
+                            # Convert both to naive datetime for comparison if needed
+                            game_et_naive = game_et.replace(tzinfo=None) if game_et.tzinfo else game_et
+                            last_used_naive = exact_match.last_used.replace(tzinfo=None) if exact_match.last_used.tzinfo else exact_match.last_used
+                            should_update = game_et_naive > last_used_naive
+                        except (AttributeError, TypeError):
+                            # Fallback - just update if we can't compare
+                            should_update = True
+                    
+                    if should_update:
+                        exact_match.last_used = game_et
+                        updated_count += 1
+                        logger.debug(f"Updated last_used for arena {arena_id} to {game_et}")
+                    else:
+                        logger.debug(f"Arena {arena_id} already has more recent last_used: {exact_match.last_used}")
+                else:
+                    # Insert new version with temporal tracking
+                    arena_data['first_used'] = game_et
+                    arena_data['last_used'] = game_et
+                    
+                    stmt = insert(Arena).values([arena_data])
+                    self.session.execute(stmt)
+                    inserted_count += 1
+                    logger.debug(f"Inserted new arena version {arena_id} with timestamp {game_et}")
             
-            if not new_arenas:
-                return 0
+            logger.info(f"Arena processing: {inserted_count} inserted, {updated_count} updated")
+            return inserted_count
             
-            stmt = insert(Arena).values(new_arenas)
-            result = self.session.execute(stmt)
-            return result.rowcount
         except Exception as e:
             logger.error(f"Error bulk inserting arenas: {e}")
             raise
     
-    def bulk_insert_teams(self, teams: List[Dict[str, Any]]) -> int:
-        """Bulk insert teams, avoiding duplicates"""
+    def _arenas_match(self, existing_arena: Arena, arena_data: Dict[str, Any]) -> bool:
+        """Check if existing arena matches all values in arena_data (excluding temporal fields)"""
+        comparison_fields = [
+            'arena_city', 'arena_name', 'arena_state', 'arena_country',
+            'arena_timezone', 'arena_postal_code', 'arena_street_address'
+        ]
+        
+        for field in comparison_fields:
+            existing_value = getattr(existing_arena, field, None)
+            new_value = arena_data.get(field)
+            if existing_value != new_value:
+                return False
+        return True
+    
+    def bulk_insert_teams(self, teams: List[Dict[str, Any]], game_et: datetime) -> int:
+        """
+        Bulk insert teams with value-based conflict detection and temporal tracking.
+        Only skips insertion if team_id exists AND all values are identical.
+        Updates last_used for exact matches, creates new versions for different values.
+        """
         if not teams:
             return 0
         
@@ -115,47 +168,87 @@ class BulkInsertService:
             return 0
         
         try:
+            inserted_count = 0
+            updated_count = 0
+            
             # Remove duplicates within the batch first
-            seen = set()
+            seen = {}
             unique_teams = []
             for team in valid_teams:
                 team_id = team['team_id']
-                if team_id not in seen:
-                    seen.add(team_id)
+                # Use values as key to identify truly unique teams in this batch
+                team_key = (team_id, team.get('team_city'), team.get('team_name'), team.get('team_tricode'))
+                if team_key not in seen:
+                    seen[team_key] = team
                     unique_teams.append(team)
             
-            if not unique_teams:
-                return 0
+            for team_data in unique_teams:
+                team_id = team_data['team_id']
+                
+                # Find existing teams with same team_id
+                existing_teams = self.session.query(Team).filter_by(team_id=team_id).all()
+                
+                # Check if any existing team has identical values
+                exact_match = None
+                for existing in existing_teams:
+                    if self._teams_match(existing, team_data):
+                        exact_match = existing
+                        break
+                
+                if exact_match:
+                    # Update last_used timestamp only if this game is more recent
+                    # Handle timezone comparison carefully
+                    should_update = exact_match.last_used is None
+                    if not should_update and exact_match.last_used is not None:
+                        try:
+                            # Convert both to naive datetime for comparison if needed
+                            game_et_naive = game_et.replace(tzinfo=None) if game_et.tzinfo else game_et
+                            last_used_naive = exact_match.last_used.replace(tzinfo=None) if exact_match.last_used.tzinfo else exact_match.last_used
+                            should_update = game_et_naive > last_used_naive
+                        except (AttributeError, TypeError):
+                            # Fallback - just update if we can't compare
+                            should_update = True
+                    
+                    if should_update:
+                        exact_match.last_used = game_et
+                        updated_count += 1
+                        logger.debug(f"Updated last_used for team {team_id} to {game_et}")
+                    else:
+                        logger.debug(f"Team {team_id} already has more recent last_used: {exact_match.last_used}")
+                else:
+                    # Insert new version with temporal tracking
+                    team_data['first_used'] = game_et
+                    team_data['last_used'] = game_et
+                    
+                    stmt = insert(Team).values([team_data])
+                    self.session.execute(stmt)
+                    inserted_count += 1
+                    logger.debug(f"Inserted new team version {team_id} with timestamp {game_et}")
             
-            # Check for existing teams to avoid trying to insert duplicates
-            existing_team_ids = set()
-            team_ids_to_check = [team['team_id'] for team in unique_teams]
+            logger.info(f"Team processing: {inserted_count} inserted, {updated_count} updated")
+            return inserted_count
             
-            if team_ids_to_check:
-                existing_teams = self.session.query(Team.team_id).filter(
-                    Team.team_id.in_(team_ids_to_check)
-                ).all()
-                existing_team_ids = {team.team_id for team in existing_teams}
-            
-            # Filter out teams that already exist
-            new_teams = [
-                team for team in unique_teams 
-                if team['team_id'] not in existing_team_ids
-            ]
-            
-            if not new_teams:
-                return 0
-            
-            # Insert new teams without conflict resolution
-            stmt = insert(Team).values(new_teams)
-            result = self.session.execute(stmt)
-            return result.rowcount
         except Exception as e:
             logger.error(f"Error bulk inserting teams: {e}")
             raise
     
-    def bulk_insert_persons(self, persons: List[Dict[str, Any]]) -> int:
-        """Bulk insert persons with ON CONFLICT DO NOTHING"""
+    def _teams_match(self, existing_team: Team, team_data: Dict[str, Any]) -> bool:
+        """Check if existing team matches all values in team_data (excluding temporal fields)"""
+        comparison_fields = ['team_city', 'team_name', 'team_tricode']
+        
+        for field in comparison_fields:
+            existing_value = getattr(existing_team, field, None)
+            new_value = team_data.get(field)
+            if existing_value != new_value:
+                return False
+        return True
+    
+    def bulk_insert_persons(self, persons: List[Dict[str, Any]], game_et: datetime) -> int:
+        """
+        Bulk insert persons with value-based conflict detection and temporal tracking.
+        Only skips insertion if person_id exists AND all values are identical.
+        Updates last_used for exact matches, creates new versions for different values.
+        """
         if not persons:
             return 0
         
@@ -168,28 +261,90 @@ class BulkInsertService:
             return 0
         
         try:
-            # Check for existing persons to avoid conflicts
-            person_ids_to_check = [person['person_id'] for person in valid_persons]
-            existing_persons = self.session.query(Person.person_id).filter(
-                Person.person_id.in_(person_ids_to_check)
-            ).all()
-            existing_person_ids = {person.person_id for person in existing_persons}
+            inserted_count = 0
+            updated_count = 0
             
-            # Filter out persons that already exist
-            new_persons = [
-                person for person in valid_persons 
-                if person['person_id'] not in existing_person_ids
-            ]
+            # Remove duplicates within the batch first
+            seen = {}
+            unique_persons = []
+            for person in valid_persons:
+                person_id = person['person_id']
+                # Use values as key to identify truly unique persons in this batch
+                person_key = (
+                    person_id, 
+                    person.get('person_name'), 
+                    person.get('person_name_i'),
+                    person.get('person_name_first'),
+                    person.get('person_name_family'),
+                    person.get('person_role')
+                )
+                if person_key not in seen:
+                    seen[person_key] = person
+                    unique_persons.append(person)
             
-            if not new_persons:
-                return 0
+            for person_data in unique_persons:
+                person_id = person_data['person_id']
+                
+                # Find existing persons with same person_id
+                existing_persons = self.session.query(Person).filter_by(person_id=person_id).all()
+                
+                # Check if any existing person has identical values
+                exact_match = None
+                for existing in existing_persons:
+                    if self._persons_match(existing, person_data):
+                        exact_match = existing
+                        break
+                
+                if exact_match:
+                    # Update last_used timestamp only if this game is more recent
+                    # Handle timezone comparison carefully
+                    should_update = exact_match.last_used is None
+                    if not should_update and exact_match.last_used is not None:
+                        try:
+                            # Convert both to naive datetime for comparison if needed
+                            game_et_naive = game_et.replace(tzinfo=None) if game_et.tzinfo else game_et
+                            last_used_naive = exact_match.last_used.replace(tzinfo=None) if exact_match.last_used.tzinfo else exact_match.last_used
+                            should_update = game_et_naive > last_used_naive
+                        except (AttributeError, TypeError):
+                            # Fallback - just update if we can't compare
+                            should_update = True
+                    
+                    if should_update:
+                        exact_match.last_used = game_et
+                        updated_count += 1
+                        logger.debug(f"Updated last_used for person {person_id} to {game_et}")
+                    else:
+                        logger.debug(f"Person {person_id} already has more recent last_used: {exact_match.last_used}")
+                else:
+                    # Insert new version with temporal tracking
+                    person_data['first_used'] = game_et
+                    person_data['last_used'] = game_et
+                    
+                    stmt = insert(Person).values([person_data])
+                    self.session.execute(stmt)
+                    inserted_count += 1
+                    logger.debug(f"Inserted new person version {person_id} with timestamp {game_et}")
             
-            stmt = insert(Person).values(new_persons)
-            result = self.session.execute(stmt)
-            return result.rowcount
+            logger.info(f"Person processing: {inserted_count} inserted, {updated_count} updated")
+            return inserted_count
+            
         except Exception as e:
             logger.error(f"Error bulk inserting persons: {e}")
             raise
+    
+    def _persons_match(self, existing_person: Person, person_data: Dict[str, Any]) -> bool:
+        """Check if existing person matches all values in person_data (excluding temporal fields)"""
+        comparison_fields = [
+            'person_name', 'person_name_i', 'person_name_first', 
+            'person_name_family', 'person_role'
+        ]
+        
+        for field in comparison_fields:
+            existing_value = getattr(existing_person, field, None)
+            new_value = person_data.get(field)
+            if existing_value != new_value:
+                return False
+        return True
     
     def bulk_insert_games(self, games: List[Dict[str, Any]]) -> int:
         """Bulk insert games with ON CONFLICT DO NOTHING"""
@@ -330,6 +485,14 @@ class GamePopulationService:
         game_id = int(game_json['boxscore']['gameId'])
         logger.info(f"Starting population for game {game_id}")
         
+        # Extract game datetime for temporal tracking
+        game_data = GameExtractor.extract(game_json)
+        game_et = game_data.get('game_et')
+        
+        if not game_et:
+            logger.warning(f"No game_et found for game {game_id}, using current time")
+            game_et = datetime.now()
+        
         results = {
             'arenas': 0,
             'teams': 0,
@@ -346,22 +509,19 @@ class GamePopulationService:
             
             # 1. Arena
             arena_data = ArenaExtractor.extract(game_json)
-            results['arenas'] = self.bulk_service.bulk_insert_arenas([arena_data])
+            results['arenas'] = self.bulk_service.bulk_insert_arenas([arena_data], game_et)
             
             # 2. Teams
             team_data = TeamExtractor.extract_teams_from_game(game_json)
-            results['teams'] = self.bulk_service.bulk_insert_teams(team_data)
+            results['teams'] = self.bulk_service.bulk_insert_teams(team_data, game_et)
             
             # 3. Persons
             person_data = PersonExtractor.extract_persons_from_game(game_json)
-            results['persons'] = self.bulk_service.bulk_insert_persons(person_data)
+            results['persons'] = self.bulk_service.bulk_insert_persons(person_data, game_et)
             
             # Phase 2: Game table (depends on Arena)
             
-            # 4. Game - need to resolve arena_internal_id
-            game_data = GameExtractor.extract(game_json)
-            
-            # Resolve arena_internal_id from arena_id
+            # 4. Game - resolve arena_internal_id (we already have game_data from above)
             arena_api_id = game_data['arena_id']
             arena = self.session.query(Arena).filter_by(arena_id=arena_api_id).first()
             if arena:

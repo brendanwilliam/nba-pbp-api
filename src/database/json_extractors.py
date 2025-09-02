@@ -70,6 +70,41 @@ class GameExtractor:
     """Extract game data from .boxscore"""
     
     @staticmethod
+    def normalize_duration(duration: str) -> Optional[str]:
+        """
+        Normalize game duration format to handle invalid formats like '1:60' -> '2:00'.
+        
+        Args:
+            duration: Original duration string
+            
+        Returns:
+            Normalized duration string, or original if already valid/invalid format
+        """
+        if not duration:
+            return duration
+            
+        # Match format like 'H:MM' or 'H:M'
+        match = re.match(r'^(\d+):(\d+)$', duration.strip())
+        if not match:
+            return duration
+            
+        hours = int(match.group(1))
+        minutes = int(match.group(2))
+        
+        # Normalize minutes >= 60
+        if minutes >= 60:
+            additional_hours = minutes // 60
+            remaining_minutes = minutes % 60
+            hours += additional_hours
+            minutes = remaining_minutes
+            
+            # Return normalized format
+            return f"{hours}:{minutes:02d}"
+        
+        # Already valid, return original
+        return duration
+    
+    @staticmethod
     def extract(game_json: Dict[str, Any]) -> Dict[str, Any]:
         """Extract game data from .boxscore"""
         boxscore = game_json['boxscore']
@@ -94,7 +129,7 @@ class GameExtractor:
             'away_team_id': boxscore['awayTeam']['teamId'],
             'away_team_wins': boxscore['awayTeam'].get('teamWins'),
             'away_team_losses': boxscore['awayTeam'].get('teamLosses'),
-            'game_duration': boxscore.get('duration'),
+            'game_duration': GameExtractor.normalize_duration(boxscore.get('duration')),
             'game_label': boxscore.get('gameLabel'),
             'game_attendance': boxscore.get('attendance')
         }
@@ -265,20 +300,22 @@ class BoxscoreExtractor:
             home_away = 'h' if team_type == 'homeTeam' else 'a'
             
             # Team totals (from statistics key)
-            if 'statistics' in team_data:
-                boxscore_entry = BoxscoreExtractor._create_boxscore_entry(
-                    game_id=game_id,
-                    team_id=None,  # Will need to be resolved from team mapping
-                    person_id=None,
-                    home_away_team=home_away,
-                    box_type='totals',
-                    stats=team_data['statistics']
-                )
-                boxscores.append(boxscore_entry)
+            if 'statistics' in team_data and team_data['statistics'] and isinstance(team_data['statistics'], dict):
+                # Skip dummy statistics (older games have {'dummyKey': ...})
+                if 'dummyKey' not in team_data['statistics']:
+                    boxscore_entry = BoxscoreExtractor._create_boxscore_entry(
+                        game_id=game_id,
+                        team_id=None,  # Will need to be resolved from team mapping
+                        person_id=None,
+                        home_away_team=home_away,
+                        box_type='totals',
+                        stats=team_data['statistics']
+                    )
+                    boxscores.append(boxscore_entry)
             
             # Team-level stats (starters and bench) - these have statistics directly at top level
             for box_type in ['starters', 'bench']:
-                if box_type in team_data:
+                if box_type in team_data and team_data[box_type] is not None:
                     # For starters/bench, the statistics are directly at the top level
                     stats = team_data[box_type]
                     boxscore_entry = BoxscoreExtractor._create_boxscore_entry(
