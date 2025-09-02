@@ -53,7 +53,8 @@ class Arena(Base):
     """Arena information for WNBA games"""
     __tablename__ = 'arena'
     
-    arena_id = Column(Integer, primary_key=True)
+    id = Column(Integer, primary_key=True)
+    arena_id = Column(Integer)
     arena_city = Column(String(100))
     arena_name = Column(String(200))
     arena_state = Column(String(50))
@@ -66,18 +67,20 @@ class Arena(Base):
     games = relationship("Game", back_populates="arena")
     
     def __repr__(self):
-        return f"<Arena(id={self.arena_id}, name='{self.arena_name}')>"
+        return f"<Arena(id={self.id}, arena_id={self.arena_id}, name='{self.arena_name}')>"
 
 
 class Person(Base):
     """Player and official information"""
     __tablename__ = 'person'
     
-    person_id = Column(Integer, primary_key=True)
+    id = Column(Integer, primary_key=True)
+    person_id = Column(Integer)
     person_name = Column(String(200))
     person_name_i = Column(String(50))
     person_name_first = Column(String(100))
     person_name_family = Column(String(100))
+    person_role = Column(String(20))
     
     # Relationships
     person_games = relationship("PersonGame", back_populates="person")
@@ -85,7 +88,7 @@ class Person(Base):
     boxscores = relationship("Boxscore", back_populates="person")
     
     def __repr__(self):
-        return f"<Person(id={self.person_id}, name='{self.person_name}')>"
+        return f"<Person(id={self.id}, person_id={self.person_id}, name='{self.person_name}')>"
 
 
 class Team(Base):
@@ -114,7 +117,8 @@ class Game(Base):
     
     game_id = Column(Integer, primary_key=True)
     game_code = Column(String(50))
-    arena_id = Column(Integer, ForeignKey('arena.arena_id'))
+    arena_id = Column(Integer)
+    arena_internal_id = Column(Integer, ForeignKey('arena.id'))
     game_et = Column(DateTime)
     game_sellout = Column(Boolean)
     home_team_id = Column(Integer)
@@ -160,7 +164,8 @@ class PersonGame(Base):
     
     person_game_id = Column(Integer, primary_key=True)
     game_id = Column(Integer, ForeignKey('game.game_id'))
-    person_id = Column(Integer, ForeignKey('person.person_id'))
+    person_id = Column(Integer)
+    person_internal_id = Column(Integer, ForeignKey('person.id'))
     team_id = Column(Integer, ForeignKey('team.id'))
     
     # Relationships
@@ -178,7 +183,8 @@ class Play(Base):
     
     play_id = Column(Integer, primary_key=True)
     game_id = Column(Integer, ForeignKey('game.game_id'))
-    person_id = Column(Integer, ForeignKey('person.person_id'), nullable=True)
+    person_id = Column(Integer, nullable=True)
+    person_internal_id = Column(Integer, ForeignKey('person.id'), nullable=True)
     team_id = Column(Integer, ForeignKey('team.id'))
     action_id = Column(Integer)
     action_type = Column(String(50))
@@ -214,7 +220,8 @@ class Boxscore(Base):
     boxscore_id = Column(Integer, primary_key=True)
     game_id = Column(Integer, ForeignKey('game.game_id'))
     team_id = Column(Integer, ForeignKey('team.id'))
-    person_id = Column(Integer, ForeignKey('person.person_id'), nullable=True)
+    person_id = Column(Integer, nullable=True)
+    person_internal_id = Column(Integer, ForeignKey('person.id'), nullable=True)
     home_away_team = Column(String(1))  # 'h' or 'a'
     box_type = Column(String(20))  # 'starters', 'bench', or 'player'
     min = Column(String(10))

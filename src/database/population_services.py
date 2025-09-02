@@ -78,8 +78,23 @@ class BulkInsertService:
             return 0
         
         try:
-            stmt = insert(Arena).values(valid_arenas)
-            stmt = stmt.on_conflict_do_nothing(index_elements=['arena_id'])
+            # Check for existing arenas to avoid conflicts
+            arena_ids_to_check = [arena['arena_id'] for arena in valid_arenas]
+            existing_arenas = self.session.query(Arena.arena_id).filter(
+                Arena.arena_id.in_(arena_ids_to_check)
+            ).all()
+            existing_arena_ids = {arena.arena_id for arena in existing_arenas}
+            
+            # Filter out arenas that already exist
+            new_arenas = [
+                arena for arena in valid_arenas 
+                if arena['arena_id'] not in existing_arena_ids
+            ]
+            
+            if not new_arenas:
+                return 0
+            
+            stmt = insert(Arena).values(new_arenas)
             result = self.session.execute(stmt)
             return result.rowcount
         except Exception as e:
@@ -153,8 +168,23 @@ class BulkInsertService:
             return 0
         
         try:
-            stmt = insert(Person).values(valid_persons)
-            stmt = stmt.on_conflict_do_nothing(index_elements=['person_id'])
+            # Check for existing persons to avoid conflicts
+            person_ids_to_check = [person['person_id'] for person in valid_persons]
+            existing_persons = self.session.query(Person.person_id).filter(
+                Person.person_id.in_(person_ids_to_check)
+            ).all()
+            existing_person_ids = {person.person_id for person in existing_persons}
+            
+            # Filter out persons that already exist
+            new_persons = [
+                person for person in valid_persons 
+                if person['person_id'] not in existing_person_ids
+            ]
+            
+            if not new_persons:
+                return 0
+            
+            stmt = insert(Person).values(new_persons)
             result = self.session.execute(stmt)
             return result.rowcount
         except Exception as e:
@@ -175,8 +205,23 @@ class BulkInsertService:
             return 0
         
         try:
-            stmt = insert(Game).values(valid_games)
-            stmt = stmt.on_conflict_do_nothing(index_elements=['game_id'])
+            # Check for existing games to avoid conflicts
+            game_ids_to_check = [game['game_id'] for game in valid_games]
+            existing_games = self.session.query(Game.game_id).filter(
+                Game.game_id.in_(game_ids_to_check)
+            ).all()
+            existing_game_ids = {game.game_id for game in existing_games}
+            
+            # Filter out games that already exist
+            new_games = [
+                game for game in valid_games 
+                if game['game_id'] not in existing_game_ids
+            ]
+            
+            if not new_games:
+                return 0
+            
+            stmt = insert(Game).values(new_games)
             result = self.session.execute(stmt)
             return result.rowcount
         except Exception as e:
@@ -199,7 +244,6 @@ class BulkInsertService:
                     unique_team_games.append(tg)
             
             stmt = insert(TeamGame).values(unique_team_games)
-            stmt = stmt.on_conflict_do_nothing()
             result = self.session.execute(stmt)
             return result.rowcount
         except Exception as e:
@@ -222,7 +266,6 @@ class BulkInsertService:
                     unique_person_games.append(pg)
             
             stmt = insert(PersonGame).values(unique_person_games)
-            stmt = stmt.on_conflict_do_nothing()
             result = self.session.execute(stmt)
             return result.rowcount
         except Exception as e:
@@ -244,7 +287,6 @@ class BulkInsertService:
         
         try:
             stmt = insert(Play).values(valid_plays)
-            stmt = stmt.on_conflict_do_nothing()
             result = self.session.execute(stmt)
             return result.rowcount
         except Exception as e:
@@ -266,7 +308,6 @@ class BulkInsertService:
         
         try:
             stmt = insert(Boxscore).values(valid_boxscores)
-            stmt = stmt.on_conflict_do_nothing()
             result = self.session.execute(stmt)
             return result.rowcount
         except Exception as e:
@@ -317,8 +358,19 @@ class GamePopulationService:
             
             # Phase 2: Game table (depends on Arena)
             
-            # 4. Game
+            # 4. Game - need to resolve arena_internal_id
             game_data = GameExtractor.extract(game_json)
+            
+            # Resolve arena_internal_id from arena_id
+            arena_api_id = game_data['arena_id']
+            arena = self.session.query(Arena).filter_by(arena_id=arena_api_id).first()
+            if arena:
+                game_data['arena_internal_id'] = arena.id
+            else:
+                # This shouldn't happen if arena was inserted above
+                logger.warning(f"Arena with arena_id {arena_api_id} not found for game {game_id}")
+                game_data['arena_internal_id'] = None
+            
             results['games'] = self.bulk_service.bulk_insert_games([game_data])
             
             # Phase 3: Junction tables and dependent data
@@ -401,18 +453,30 @@ class GamePopulationService:
                 db_team_id = team_id_mapping.get(api_team_id)
                 
                 for player in boxscore[team_type]['players']:
+                    person_api_id = player['personId']
+                    # Resolve person_internal_id
+                    db_person = self.session.query(Person).filter_by(person_id=person_api_id).first()
+                    person_internal_id = db_person.id if db_person else None
+                    
                     person_games.append({
                         'game_id': game_id,
-                        'person_id': player['personId'],
+                        'person_id': person_api_id,
+                        'person_internal_id': person_internal_id,
                         'team_id': db_team_id
                     })
         
         # Officials (no team association)
         if 'officials' in boxscore:
             for official in boxscore['officials']:
+                person_api_id = official['personId']
+                # Resolve person_internal_id
+                db_person = self.session.query(Person).filter_by(person_id=person_api_id).first()
+                person_internal_id = db_person.id if db_person else None
+                
                 person_games.append({
                     'game_id': game_id,
-                    'person_id': official['personId'],
+                    'person_id': person_api_id,
+                    'person_internal_id': person_internal_id,
                     'team_id': None
                 })
         
@@ -431,6 +495,15 @@ class GamePopulationService:
             else:
                 play['team_id'] = None
         
+        # Also resolve person_internal_id for plays
+        for play in plays:
+            person_api_id = play.get('person_id')
+            if person_api_id:
+                db_person = self.session.query(Person).filter_by(person_id=person_api_id).first()
+                play['person_internal_id'] = db_person.id if db_person else None
+            else:
+                play['person_internal_id'] = None
+        
         return plays
     
     def _resolve_team_ids_for_boxscores(self, boxscores: List[Dict[str, Any]], 
@@ -445,12 +518,20 @@ class GamePopulationService:
         home_team = self.session.query(Team).filter_by(team_id=home_team_api_id).first()
         away_team = self.session.query(Team).filter_by(team_id=away_team_api_id).first()
         
-        # Update boxscores with resolved team IDs
+        # Update boxscores with resolved team IDs and person_internal_id
         for boxscore_entry in boxscores:
             if boxscore_entry['home_away_team'] == 'h' and home_team:
                 boxscore_entry['team_id'] = home_team.id
             elif boxscore_entry['home_away_team'] == 'a' and away_team:
                 boxscore_entry['team_id'] = away_team.id
+                
+            # Resolve person_internal_id for boxscore entries
+            person_api_id = boxscore_entry.get('person_id')
+            if person_api_id:
+                db_person = self.session.query(Person).filter_by(person_id=person_api_id).first()
+                boxscore_entry['person_internal_id'] = db_person.id if db_person else None
+            else:
+                boxscore_entry['person_internal_id'] = None
         
         return boxscores
     
@@ -467,3 +548,60 @@ class GamePopulationService:
                     mapping[api_team_id] = db_team.id
         
         return mapping
+    
+    def clear_game_data(self, game_id: int) -> Dict[str, int]:
+        """
+        Clear all data for a specific game from all tables.
+        Returns count of records deleted from each table.
+        
+        Args:
+            game_id: The game ID to clear data for
+            
+        Returns:
+            Dictionary with deletion counts for each table
+        """
+        logger.info(f"Clearing existing data for game {game_id}")
+        
+        deletion_counts = {
+            'boxscores': 0,
+            'plays': 0, 
+            'person_games': 0,
+            'team_games': 0,
+            'games': 0
+            # Note: Not clearing arenas, teams, persons as they may be shared across games
+        }
+        
+        try:
+            # Delete in reverse dependency order
+            
+            # 1. Boxscores (depends on game, person, team)
+            result = self.session.query(Boxscore).filter(Boxscore.game_id == game_id).delete()
+            deletion_counts['boxscores'] = result
+            logger.info(f"Deleted {result} boxscore records for game {game_id}")
+            
+            # 2. Plays (depends on game, person, team)  
+            result = self.session.query(Play).filter(Play.game_id == game_id).delete()
+            deletion_counts['plays'] = result
+            logger.info(f"Deleted {result} play records for game {game_id}")
+            
+            # 3. PersonGame junction records
+            result = self.session.query(PersonGame).filter(PersonGame.game_id == game_id).delete()
+            deletion_counts['person_games'] = result
+            logger.info(f"Deleted {result} person_game records for game {game_id}")
+            
+            # 4. TeamGame junction records
+            result = self.session.query(TeamGame).filter(TeamGame.game_id == game_id).delete()
+            deletion_counts['team_games'] = result
+            logger.info(f"Deleted {result} team_game records for game {game_id}")
+            
+            # 5. Game record itself
+            result = self.session.query(Game).filter(Game.game_id == game_id).delete()
+            deletion_counts['games'] = result
+            logger.info(f"Deleted {result} game record for game {game_id}")
+            
+            logger.info(f"Completed clearing data for game {game_id}: {deletion_counts}")
+            return deletion_counts
+            
+        except Exception as e:
+            logger.error(f"Error clearing data for game {game_id}: {e}")
+            raise

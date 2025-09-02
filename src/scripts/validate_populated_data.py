@@ -13,7 +13,7 @@ from collections import defaultdict
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
-from ..database.database import get_db_engine
+from ..database.services import DatabaseConnection
 from ..database.models import Arena, Team, Person, Game, TeamGame, PersonGame, Play, Boxscore
 
 
@@ -29,7 +29,8 @@ class DataValidator:
     """Comprehensive data validation for populated WNBA tables"""
     
     def __init__(self):
-        self.engine = get_db_engine()
+        self.db_connection = DatabaseConnection()
+        self.engine = self.db_connection.get_engine()
         self.Session = sessionmaker(bind=self.engine)
         self.issues = []
     

@@ -13,7 +13,7 @@ from datetime import datetime
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine, text
 
-from ..database.database import get_db_engine
+from ..database.services import DatabaseConnection
 from ..database.models import RawGameData
 from ..database.population_services import GamePopulationService
 from ..database.services import DatabaseService
@@ -35,17 +35,20 @@ class GameTablePopulator:
     """Main orchestrator for populating game tables"""
     
     def __init__(self):
-        self.engine = get_db_engine()
+        self.db_connection = DatabaseConnection()
+        self.engine = self.db_connection.get_engine()
         self.Session = sessionmaker(bind=self.engine)
     
     def populate_all_games(self, limit: Optional[int] = None, 
-                          resume_from_game_id: Optional[int] = None) -> dict:
+                          resume_from_game_id: Optional[int] = None,
+                          override_existing: bool = False) -> dict:
         """
         Populate all games from raw_game_data table.
         
         Args:
             limit: Maximum number of games to process
             resume_from_game_id: Resume processing from this game ID
+            override_existing: If True, reprocess games that already exist in tables
             
         Returns:
             Dictionary with processing statistics
@@ -67,14 +70,15 @@ class GameTablePopulator:
             games = query.all()
             logger.info(f"Found {len(games)} games to process")
             
-            return self._process_games(games)
+            return self._process_games(games, override_existing=override_existing)
     
-    def populate_specific_games(self, game_ids: List[int]) -> dict:
+    def populate_specific_games(self, game_ids: List[int], override_existing: bool = False) -> dict:
         """
         Populate specific games by ID.
         
         Args:
             game_ids: List of game IDs to process
+            override_existing: If True, reprocess games that already exist in tables
             
         Returns:
             Dictionary with processing statistics
@@ -94,16 +98,18 @@ class GameTablePopulator:
                 logger.warning(f"Games not found in raw data: {sorted(missing_ids)}")
             
             logger.info(f"Found {len(games)} games to process")
-            return self._process_games(games)
+            return self._process_games(games, override_existing=override_existing)
     
     def populate_games_by_season(self, seasons: List[int], 
-                                limit: Optional[int] = None) -> dict:
+                                limit: Optional[int] = None,
+                                override_existing: bool = False) -> dict:
         """
         Populate games by season(s).
         
         Args:
             seasons: List of seasons to process (e.g., [2024])
             limit: Maximum number of games per season
+            override_existing: If True, reprocess games that already exist in tables
             
         Returns:
             Dictionary with processing statistics
@@ -122,14 +128,15 @@ class GameTablePopulator:
             games = query.all()
             logger.info(f"Found {len(games)} games to process")
             
-            return self._process_games(games)
+            return self._process_games(games, override_existing=override_existing)
     
-    def _process_games(self, games: List[RawGameData]) -> dict:
+    def _process_games(self, games: List[RawGameData], override_existing: bool = False) -> dict:
         """
         Process a list of games with transaction management.
         
         Args:
             games: List of RawGameData objects to process
+            override_existing: If True, clear existing data for each game before processing
             
         Returns:
             Dictionary with processing statistics
@@ -162,6 +169,11 @@ class GameTablePopulator:
                     population_service = GamePopulationService(session)
                     
                     logger.info(f"Processing game {game_id} ({i}/{len(games)})")
+                    
+                    # Clear existing data if override is requested
+                    if override_existing:
+                        logger.info(f"Override flag set - clearing existing data for game {game_id}")
+                        population_service.clear_game_data(game_id)
                     
                     # Populate the game
                     game_results = population_service.populate_game(raw_game.game_data)
@@ -325,6 +337,10 @@ def main():
         '--dry-run', action='store_true',
         help='Show what would be processed without actual processing'
     )
+    parser.add_argument(
+        '--override', action='store_true',
+        help='Override existing data - clear and repopulate games that already exist'
+    )
     
     args = parser.parse_args()
     
@@ -343,14 +359,16 @@ def main():
         if args.all:
             stats = populator.populate_all_games(
                 limit=args.limit,
-                resume_from_game_id=args.resume_from
+                resume_from_game_id=args.resume_from,
+                override_existing=args.override
             )
         elif args.games:
-            stats = populator.populate_specific_games(args.games)
+            stats = populator.populate_specific_games(args.games, override_existing=args.override)
         elif args.seasons:
             stats = populator.populate_games_by_season(
                 args.seasons,
-                limit=args.limit
+                limit=args.limit,
+                override_existing=args.override
             )
         
         # Validate foreign keys if requested

@@ -34,25 +34,36 @@ class TeamExtractor:
     @staticmethod
     def extract_teams_from_game(game_json: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Extract all unique teams from a game"""
-        teams = set()
+        teams = {}
         boxscore = game_json['boxscore']
         
-        # Home and away teams
-        home_team_id = boxscore['homeTeam']['teamId']
-        away_team_id = boxscore['awayTeam']['teamId']
+        # Home and away teams with full details
+        for team_key in ['homeTeam', 'awayTeam']:
+            if team_key in boxscore:
+                team_data = boxscore[team_key]
+                team_id = team_data['teamId']
+                teams[team_id] = {
+                    'team_id': team_id,
+                    'team_city': team_data.get('teamCity'),
+                    'team_name': team_data.get('teamName'),
+                    'team_tricode': team_data.get('teamTricode')
+                }
         
-        teams.add(home_team_id)
-        teams.add(away_team_id)
-        
-        # Teams from play-by-play data
+        # Teams from play-by-play data (basic info only)
         if 'postGameData' in game_json and 'postPlayByPlayData' in game_json['postGameData']:
             for period in game_json['postGameData']['postPlayByPlayData']:
                 for action in period.get('actions', []):
                     if 'teamId' in action and action['teamId']:
-                        teams.add(action['teamId'])
+                        team_id = action['teamId']
+                        if team_id not in teams:
+                            teams[team_id] = {
+                                'team_id': team_id,
+                                'team_city': None,
+                                'team_name': None,
+                                'team_tricode': None
+                            }
         
-        # Convert to list of dictionaries (basic structure - will need enhancement)
-        return [{'team_id': team_id} for team_id in teams if team_id]
+        return list(teams.values())
 
 
 class GameExtractor:
@@ -109,7 +120,8 @@ class PersonExtractor:
                             'person_name': player.get('name'),
                             'person_name_i': player.get('nameI'),
                             'person_name_first': player.get('firstName'),
-                            'person_name_family': player.get('familyName')
+                            'person_name_family': player.get('familyName'),
+                            'person_role': 'player'
                         }
         
         # Officials
@@ -122,7 +134,8 @@ class PersonExtractor:
                         'person_name': official.get('name'),
                         'person_name_i': official.get('nameI'),
                         'person_name_first': official.get('firstName'),
-                        'person_name_family': official.get('familyName')
+                        'person_name_family': official.get('familyName'),
+                        'person_role': 'official'
                     }
         
         # Persons from play-by-play data
@@ -130,13 +143,21 @@ class PersonExtractor:
             for period in game_json['postGameData']['postPlayByPlayData']:
                 for action in period.get('actions', []):
                     person_id = action.get('personId')
-                    if person_id and person_id != 0 and person_id not in persons:
+                    # Filter out invalid person IDs:
+                    # - Team IDs (WNBA team IDs are in range 1611661300-1611661399)
+                    # - System/administrative action IDs (typically < 1000)
+                    # - Only include if we have an actual player name
+                    if (person_id and person_id != 0 and person_id not in persons 
+                        and not (1611661300 <= person_id <= 1611661399)
+                        and person_id >= 1000
+                        and action.get('playerName')):
                         persons[person_id] = {
                             'person_id': person_id,
                             'person_name': action.get('playerName'),
                             'person_name_i': action.get('playerNameI'),
                             'person_name_first': None,
-                            'person_name_family': None
+                            'person_name_family': None,
+                            'person_role': 'player'  # Persons from play actions are players
                         }
         
         return list(persons.values())
@@ -158,10 +179,16 @@ class PlayExtractor:
             period = period_data['period']
             
             for action in period_data.get('actions', []):
-                # Handle nullable personId (0 means no person)
+                # Handle nullable personId and filter out invalid IDs
                 person_id = action.get('personId')
                 if person_id == 0:
                     person_id = None
+                elif person_id:
+                    # Filter out invalid person IDs (same logic as PersonExtractor):
+                    # - Team IDs (1611661300-1611661399)
+                    # - System/administrative IDs (< 1000)
+                    if (1611661300 <= person_id <= 1611661399) or person_id < 1000:
+                        person_id = None
                 
                 play_data = {
                     'game_id': game_id,
@@ -237,9 +264,22 @@ class BoxscoreExtractor:
             team_data = boxscore_data[team_type]
             home_away = 'h' if team_type == 'homeTeam' else 'a'
             
-            # Team-level stats (starters and bench)
+            # Team totals (from statistics key)
+            if 'statistics' in team_data:
+                boxscore_entry = BoxscoreExtractor._create_boxscore_entry(
+                    game_id=game_id,
+                    team_id=None,  # Will need to be resolved from team mapping
+                    person_id=None,
+                    home_away_team=home_away,
+                    box_type='totals',
+                    stats=team_data['statistics']
+                )
+                boxscores.append(boxscore_entry)
+            
+            # Team-level stats (starters and bench) - these have statistics directly at top level
             for box_type in ['starters', 'bench']:
                 if box_type in team_data:
+                    # For starters/bench, the statistics are directly at the top level
                     stats = team_data[box_type]
                     boxscore_entry = BoxscoreExtractor._create_boxscore_entry(
                         game_id=game_id,
@@ -251,18 +291,25 @@ class BoxscoreExtractor:
                     )
                     boxscores.append(boxscore_entry)
             
-            # Individual player stats
+            # Individual player stats - these have statistics sub-object
             if 'players' in team_data:
                 for player_stats in team_data['players']:
-                    boxscore_entry = BoxscoreExtractor._create_boxscore_entry(
-                        game_id=game_id,
-                        team_id=None,  # Will need to be resolved
-                        person_id=player_stats.get('personId'),
-                        home_away_team=home_away,
-                        box_type='player',
-                        stats=player_stats
-                    )
-                    boxscores.append(boxscore_entry)
+                    # Player stats are in the 'statistics' sub-object
+                    if 'statistics' in player_stats:
+                        # Filter out invalid person IDs (same logic as PersonExtractor)
+                        person_id = player_stats.get('personId')
+                        if person_id and ((1611661300 <= person_id <= 1611661399) or person_id < 1000):
+                            person_id = None
+                            
+                        boxscore_entry = BoxscoreExtractor._create_boxscore_entry(
+                            game_id=game_id,
+                            team_id=None,  # Will need to be resolved
+                            person_id=person_id,
+                            home_away_team=home_away,
+                            box_type='player',
+                            stats=player_stats['statistics']
+                        )
+                        boxscores.append(boxscore_entry)
         
         return boxscores
     
@@ -291,9 +338,21 @@ class BoxscoreExtractor:
                 entry[db_column] = None
             elif api_field in ['fieldGoalsPercentage', 'threePointersPercentage', 'freeThrowsPercentage']:
                 # Convert percentage to float
-                entry[db_column] = float(value) if value is not None else None
+                if value is None or value == '':
+                    entry[db_column] = None
+                else:
+                    try:
+                        entry[db_column] = float(value)
+                    except (ValueError, TypeError):
+                        entry[db_column] = None
             else:
-                # Convert to int for count stats, None for missing
-                entry[db_column] = int(value) if value is not None else None
+                # Convert to int for count stats, None for missing/empty
+                if value is None or value == '' or value == 0:
+                    entry[db_column] = None if value is None or value == '' else 0
+                else:
+                    try:
+                        entry[db_column] = int(value)
+                    except (ValueError, TypeError):
+                        entry[db_column] = None
         
         return entry
