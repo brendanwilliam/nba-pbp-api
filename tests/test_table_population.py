@@ -116,6 +116,7 @@ class TestBulkInsertService:
     
     def test_bulk_insert_arenas(self, test_session):
         """Test bulk arena insertion"""
+        from datetime import datetime
         service = BulkInsertService(test_session)
         
         arenas = [
@@ -123,7 +124,8 @@ class TestBulkInsertService:
             {'arena_id': 2, 'arena_name': 'Arena 2'}
         ]
         
-        count = service.bulk_insert_arenas(arenas)
+        game_et = datetime(2024, 1, 1)
+        count = service.bulk_insert_arenas(arenas, game_et)
         test_session.commit()
         
         assert count == 2
@@ -137,8 +139,10 @@ class TestBulkInsertService:
         service = BulkInsertService(test_session)
         
         # Insert initial arenas
+        from datetime import datetime
+        game_et = datetime(2024, 1, 1)
         arenas1 = [{'arena_id': 1, 'arena_name': 'Arena 1'}]
-        service.bulk_insert_arenas(arenas1)
+        service.bulk_insert_arenas(arenas1, game_et)
         test_session.commit()
         
         # Insert overlapping arenas
@@ -146,7 +150,7 @@ class TestBulkInsertService:
             {'arena_id': 1, 'arena_name': 'Arena 1 Updated'},  # Conflict
             {'arena_id': 2, 'arena_name': 'Arena 2'}  # New
         ]
-        count = service.bulk_insert_arenas(arenas2)
+        count = service.bulk_insert_arenas(arenas2, game_et)
         test_session.commit()
         
         # Should only insert the new one (conflict ignored)
@@ -157,6 +161,7 @@ class TestBulkInsertService:
     
     def test_bulk_insert_teams(self, test_session):
         """Test bulk team insertion"""
+        from datetime import datetime
         service = BulkInsertService(test_session)
         
         teams = [
@@ -164,7 +169,8 @@ class TestBulkInsertService:
             {'team_id': 2, 'team_name': 'Team 2'}
         ]
         
-        count = service.bulk_insert_teams(teams)
+        game_et = datetime(2024, 1, 1)
+        count = service.bulk_insert_teams(teams, game_et)
         test_session.commit()
         
         assert count == 2
@@ -175,6 +181,7 @@ class TestBulkInsertService:
     
     def test_bulk_insert_invalid_data(self, test_session):
         """Test bulk insertion with invalid data"""
+        from datetime import datetime
         service = BulkInsertService(test_session)
         
         # Invalid arena data (missing arena_id)
@@ -182,7 +189,8 @@ class TestBulkInsertService:
             {'arena_name': 'Invalid Arena'}
         ]
         
-        count = service.bulk_insert_arenas(arenas)
+        game_et = datetime(2024, 1, 1)
+        count = service.bulk_insert_arenas(arenas, game_et)
         test_session.commit()
         
         assert count == 0

@@ -153,9 +153,9 @@ class PersonExtractor:
                         persons[person_id] = {
                             'person_id': person_id,
                             'person_name': player.get('name'),
-                            'person_name_i': player.get('nameI'),
-                            'person_name_first': player.get('firstName'),
-                            'person_name_family': player.get('familyName'),
+                            'person_iname': player.get('nameI'),
+                            'person_fname': player.get('firstName'),
+                            'person_lname': player.get('familyName'),
                             'person_role': 'player'
                         }
         
@@ -167,12 +167,31 @@ class PersonExtractor:
                     persons[person_id] = {
                         'person_id': person_id,
                         'person_name': official.get('name'),
-                        'person_name_i': official.get('nameI'),
-                        'person_name_first': official.get('firstName'),
-                        'person_name_family': official.get('familyName'),
+                        'person_iname': official.get('nameI'),
+                        'person_fname': official.get('firstName'),
+                        'person_lname': official.get('familyName'),
                         'person_role': 'official'
                     }
         
+        # Additional players from postBoxscoreData (contains more complete data)
+        if 'postGameData' in game_json and 'postBoxscoreData' in game_json['postGameData']:
+            post_boxscore = game_json['postGameData']['postBoxscoreData']
+            for team_key in ['homeTeam', 'awayTeam']:
+                if team_key in post_boxscore and 'players' in post_boxscore[team_key]:
+                    for player_stats in post_boxscore[team_key]['players']:
+                        person_id = player_stats.get('personId')
+                        # Filter out invalid person IDs (same logic as BoxscoreExtractor)
+                        if person_id and not ((1611661300 <= person_id <= 1611661399) or person_id < 1000):
+                            if person_id not in persons:
+                                persons[person_id] = {
+                                    'person_id': person_id,
+                                    'person_name': player_stats.get('name'),
+                                    'person_iname': player_stats.get('nameI'), 
+                                    'person_fname': player_stats.get('firstName'),
+                                    'person_lname': player_stats.get('familyName'),
+                                    'person_role': 'player'
+                                }
+
         # Persons from play-by-play data
         if 'postGameData' in game_json and 'postPlayByPlayData' in game_json['postGameData']:
             for period in game_json['postGameData']['postPlayByPlayData']:
@@ -189,9 +208,9 @@ class PersonExtractor:
                         persons[person_id] = {
                             'person_id': person_id,
                             'person_name': action.get('playerName'),
-                            'person_name_i': action.get('playerNameI'),
-                            'person_name_first': None,
-                            'person_name_family': None,
+                            'person_iname': action.get('playerNameI'),
+                            'person_fname': None,
+                            'person_lname': None,
                             'person_role': 'player'  # Persons from play actions are players
                         }
         
@@ -370,9 +389,13 @@ class BoxscoreExtractor:
             if api_field == 'minutes' and value:
                 # Keep as string for minutes format (e.g., "25:30")
                 entry[db_column] = str(value)
-            elif api_field == 'plusMinusPoints' and value is None:
+            elif api_field == 'plusMinusPoints':
                 # plusMinusPoints is only for players, null for team totals
-                entry[db_column] = None
+                if box_type in ['totals', 'starters', 'bench']:
+                    entry[db_column] = None
+                else:
+                    # For players, use the actual value (could be None or a number)
+                    entry[db_column] = int(value) if value is not None and value != '' else None
             elif api_field in ['fieldGoalsPercentage', 'threePointersPercentage', 'freeThrowsPercentage']:
                 # Convert percentage to float
                 if value is None or value == '':

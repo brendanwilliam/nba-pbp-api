@@ -74,6 +74,8 @@ class LastUsedBackfiller:
         
         for team in all_teams:
             # Find latest game involving this team via TeamGame junction
+            # Find latest game involving this team via TeamGame junction
+            # Use team.id (internal PK) since that's what TeamGame.team_id references
             latest_game = session.query(Game).join(
                 TeamGame, Game.game_id == TeamGame.game_id
             ).filter(

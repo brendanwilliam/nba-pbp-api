@@ -273,9 +273,9 @@ class BulkInsertService:
                 person_key = (
                     person_id, 
                     person.get('person_name'), 
-                    person.get('person_name_i'),
-                    person.get('person_name_first'),
-                    person.get('person_name_family'),
+                    person.get('person_iname'),
+                    person.get('person_fname'),
+                    person.get('person_lname'),
                     person.get('person_role')
                 )
                 if person_key not in seen:
@@ -335,8 +335,8 @@ class BulkInsertService:
     def _persons_match(self, existing_person: Person, person_data: Dict[str, Any]) -> bool:
         """Check if existing person matches all values in person_data (excluding temporal fields)"""
         comparison_fields = [
-            'person_name', 'person_name_i', 'person_name_first', 
-            'person_name_family', 'person_role'
+            'person_name', 'person_iname', 'person_fname', 
+            'person_lname', 'person_role'
         ]
         
         for field in comparison_fields:

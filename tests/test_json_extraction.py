@@ -151,9 +151,9 @@ class TestPersonExtractor:
         
         assert elizabeth_williams is not None
         assert elizabeth_williams['person_id'] == 204322
-        assert elizabeth_williams['person_name_i'] == 'E. Williams'
-        assert elizabeth_williams['person_name_first'] == 'Elizabeth'
-        assert elizabeth_williams['person_name_family'] == 'Williams'
+        assert elizabeth_williams['person_iname'] == 'E. Williams'
+        assert elizabeth_williams['person_fname'] == 'Elizabeth'
+        assert elizabeth_williams['person_lname'] == 'Williams'
     
     def test_extract_officials(self, sample_game_json):
         """Test official extraction if present"""

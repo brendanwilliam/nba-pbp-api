@@ -401,3 +401,44 @@ Both scripts integrate with:
 - `database.models`: SQLAlchemy ORM models
 - `database.database`: Database connection management
 - `json_extractors`: Data transformation utilities
+
+## Temporal Tracking Backfill Scripts
+
+The project includes temporal tracking scripts for maintaining `first_used` and `last_used` timestamps on Arena, Team, and Person entities.
+
+### First Used Backfill
+
+```bash
+# Backfill first_used timestamps for entities with NULL values
+python -m src.scripts.backfill_first_used
+
+# Preview changes without modifying database
+python -m src.scripts.backfill_first_used --dry-run
+
+# Enable verbose logging
+python -m src.scripts.backfill_first_used --verbose
+```
+
+**Purpose**: Sets `first_used` timestamps for entities that were created before temporal tracking was implemented. Only processes entities with NULL `first_used` values.
+
+### Last Used Backfill
+
+```bash
+# Update all last_used timestamps to ensure accuracy
+python -m src.scripts.backfill_last_used
+
+# Preview changes without modifying database
+python -m src.scripts.backfill_last_used --dry-run
+
+# Enable verbose logging
+python -m src.scripts.backfill_last_used --verbose
+```
+
+**Purpose**: Updates `last_used` timestamps for all entities by finding their most recent game appearance. Useful for data quality assurance and correcting temporal tracking.
+
+### When to Use
+
+- **First Used**: Run once after implementing temporal tracking to backfill legacy entities
+- **Last Used**: Run periodically to ensure timestamp accuracy or after data corrections
+
+These timestamps are automatically maintained by the population system for new data, but these scripts handle historical data that predates the temporal tracking feature.

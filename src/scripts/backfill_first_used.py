@@ -69,6 +69,8 @@ class FirstUsedBackfiller:
         
         for team in null_teams:
             # Find earliest game involving this team via TeamGame junction
+            # Find earliest game involving this team via TeamGame junction
+            # Use team.id (internal PK) since that's what TeamGame.team_id references
             earliest_game = session.query(Game).join(
                 TeamGame, Game.game_id == TeamGame.game_id
             ).filter(

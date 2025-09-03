@@ -244,7 +244,7 @@ class DataValidator:
                 'name': 'Persons without names',
                 'query': '''
                     SELECT COUNT(*) FROM person 
-                    WHERE person_name IS NULL AND person_name_i IS NULL
+                    WHERE person_name IS NULL AND person_iname IS NULL
                 ''',
                 'description': 'Persons without any name information',
                 'severity': 'WARNING'

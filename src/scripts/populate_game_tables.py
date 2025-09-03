@@ -70,6 +70,10 @@ class GameTablePopulator:
             games = query.all()
             logger.info(f"Found {len(games)} games to process")
             
+            # Sort games chronologically by extracting game_et from JSON data
+            logger.info("Sorting games chronologically to ensure correct first_used timestamps...")
+            games = self._sort_games_chronologically(games)
+            
             return self._process_games(games, override_existing=override_existing)
     
     def populate_specific_games(self, game_ids: List[int], override_existing: bool = False) -> dict:
@@ -98,6 +102,11 @@ class GameTablePopulator:
                 logger.warning(f"Games not found in raw data: {sorted(missing_ids)}")
             
             logger.info(f"Found {len(games)} games to process")
+            
+            # Sort games chronologically by extracting game_et from JSON data
+            logger.info("Sorting games chronologically to ensure correct first_used timestamps...")
+            games = self._sort_games_chronologically(games)
+            
             return self._process_games(games, override_existing=override_existing)
     
     def populate_games_by_season(self, seasons: List[int], 
@@ -128,7 +137,43 @@ class GameTablePopulator:
             games = query.all()
             logger.info(f"Found {len(games)} games to process")
             
+            # Sort games chronologically by extracting game_et from JSON data
+            logger.info("Sorting games chronologically to ensure correct first_used timestamps...")
+            games = self._sort_games_chronologically(games)
+            
             return self._process_games(games, override_existing=override_existing)
+    
+    def _sort_games_chronologically(self, games: List[RawGameData]) -> List[RawGameData]:
+        """
+        Sort games chronologically by extracting game_et from JSON data.
+        This ensures first_used timestamps are set correctly.
+        """
+        def extract_game_et(raw_game: RawGameData):
+            """Extract game_et timestamp from JSON data for sorting"""
+            try:
+                game_data = raw_game.game_data
+                if 'boxscore' in game_data and 'gameEt' in game_data['boxscore']:
+                    game_et_str = game_data['boxscore']['gameEt']
+                    if game_et_str:
+                        from datetime import datetime
+                        return datetime.fromisoformat(game_et_str.replace('Z', '+00:00'))
+                
+                # Fallback: use game_id as proxy for chronological order within same format
+                return datetime(1900, 1, 1)  # Very early date for games without timestamps
+                
+            except Exception as e:
+                logger.warning(f"Could not extract game_et from game {raw_game.game_id}: {e}")
+                return datetime(1900, 1, 1)  # Very early date for problematic games
+        
+        # Sort by game_et timestamp
+        sorted_games = sorted(games, key=extract_game_et)
+        
+        if len(sorted_games) > 0:
+            first_date = extract_game_et(sorted_games[0])
+            last_date = extract_game_et(sorted_games[-1])
+            logger.info(f"Games sorted chronologically: {first_date} to {last_date}")
+        
+        return sorted_games
     
     def _process_games(self, games: List[RawGameData], override_existing: bool = False) -> dict:
         """
@@ -220,6 +265,59 @@ class GameTablePopulator:
         logger.info("\nRecords inserted by table:")
         for table, count in stats['table_counts'].items():
             logger.info(f"  {table}: {count}")
+    
+    def clear_all_tables(self) -> bool:
+        """
+        Clear all populated tables and reset sequences (hard reset).
+        
+        Returns:
+            True if successful
+        """
+        logger.info("Starting hard reset - clearing all populated tables...")
+        
+        # Define tables in dependency order (children first, parents last)
+        tables_to_clear = [
+            'boxscore',
+            'play', 
+            'person_game',
+            'team_game',
+            'game',
+            'person',
+            'team',
+            'arena'
+        ]
+        
+        with self.Session() as session:
+            try:
+                # Clear tables in dependency order
+                for table_name in tables_to_clear:
+                    logger.info(f"Clearing table: {table_name}")
+                    session.execute(text(f"DELETE FROM {table_name}"))
+                
+                # Reset sequences for tables with auto-incrementing IDs
+                sequences_to_reset = [
+                    ('arena', 'arena_arena_id_seq'),
+                    ('team', 'team_id_seq'), 
+                    ('person', 'person_person_id_seq'),
+                    ('game', 'game_game_id_seq'),
+                    ('team_game', 'team_game_team_game_id_seq'),
+                    ('person_game', 'person_game_person_game_id_seq'),
+                    ('play', 'play_play_id_seq'),
+                    ('boxscore', 'boxscore_boxscore_id_seq')
+                ]
+                
+                for table_name, seq_name in sequences_to_reset:
+                    logger.info(f"Resetting sequence: {seq_name}")
+                    session.execute(text(f"ALTER SEQUENCE {seq_name} RESTART WITH 1"))
+                
+                session.commit()
+                logger.info("✅ All tables cleared and sequences reset successfully")
+                return True
+                
+            except Exception as e:
+                logger.error(f"Error during table clearing: {e}")
+                session.rollback()
+                raise
     
     def validate_foreign_keys(self) -> bool:
         """
@@ -341,6 +439,10 @@ def main():
         '--override', action='store_true',
         help='Override existing data - clear and repopulate games that already exist'
     )
+    parser.add_argument(
+        '--clear-tables', action='store_true',
+        help='Clear all populated tables and reset sequences before processing (hard reset)'
+    )
     
     args = parser.parse_args()
     
@@ -354,6 +456,12 @@ def main():
         if args.dry_run:
             logger.info("DRY RUN MODE - No actual processing will occur")
             return
+        
+        # Clear all tables if requested (hard reset)
+        if args.clear_tables:
+            logger.info("🗑️  HARD RESET requested - clearing all tables and resetting sequences")
+            populator.clear_all_tables()
+            logger.info("Hard reset complete. Starting fresh population...")
         
         # Execute population based on mode
         if args.all:
