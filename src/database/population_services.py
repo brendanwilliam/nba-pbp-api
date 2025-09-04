@@ -347,7 +347,7 @@ class BulkInsertService:
         return True
     
     def bulk_insert_games(self, games: List[Dict[str, Any]]) -> int:
-        """Bulk insert games with ON CONFLICT DO NOTHING"""
+        """Bulk insert games and update season/game_type for existing games"""
         if not games:
             return 0
         
@@ -360,25 +360,45 @@ class BulkInsertService:
             return 0
         
         try:
-            # Check for existing games to avoid conflicts
+            # Check for existing games 
             game_ids_to_check = [game['game_id'] for game in valid_games]
-            existing_games = self.session.query(Game.game_id).filter(
+            existing_games = self.session.query(Game).filter(
                 Game.game_id.in_(game_ids_to_check)
             ).all()
-            existing_game_ids = {game.game_id for game in existing_games}
+            existing_game_ids = {game.game_id: game for game in existing_games}
             
-            # Filter out games that already exist
-            new_games = [
-                game for game in valid_games 
-                if game['game_id'] not in existing_game_ids
-            ]
+            # Separate new games from existing games
+            new_games = []
+            updated_count = 0
             
-            if not new_games:
-                return 0
+            for game in valid_games:
+                game_id = game['game_id']
+                if game_id in existing_game_ids:
+                    # Update existing game if season or game_type is None
+                    existing_game = existing_game_ids[game_id]
+                    needs_update = False
+                    
+                    if existing_game.season is None and game.get('season') is not None:
+                        existing_game.season = game['season']
+                        needs_update = True
+                    
+                    if existing_game.game_type is None and game.get('game_type') is not None:
+                        existing_game.game_type = game['game_type']
+                        needs_update = True
+                        
+                    if needs_update:
+                        updated_count += 1
+                else:
+                    new_games.append(game)
             
-            stmt = insert(Game).values(new_games)
-            result = self.session.execute(stmt)
-            return result.rowcount
+            # Insert new games
+            inserted_count = 0
+            if new_games:
+                stmt = insert(Game).values(new_games)
+                result = self.session.execute(stmt)
+                inserted_count = result.rowcount
+            
+            return inserted_count + updated_count
         except Exception as e:
             logger.error(f"Error bulk inserting games: {e}")
             raise

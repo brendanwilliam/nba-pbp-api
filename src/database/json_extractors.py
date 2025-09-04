@@ -6,6 +6,7 @@ Each extractor handles one type of data transformation from the raw WNBA game da
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 import re
+from .game_utils import parse_game_id
 
 
 class ArenaExtractor:
@@ -117,8 +118,11 @@ class GameExtractor:
             except ValueError:
                 pass
         
+        game_id = int(boxscore['gameId'])
+        game_metadata = parse_game_id(game_id)
+        
         return {
-            'game_id': int(boxscore['gameId']),
+            'game_id': game_id,
             'game_code': boxscore.get('gameCode'),
             'arena_id': boxscore['arena']['arenaId'],
             'game_et': game_et,
@@ -131,7 +135,9 @@ class GameExtractor:
             'away_team_losses': boxscore['awayTeam'].get('teamLosses'),
             'game_duration': GameExtractor.normalize_duration(boxscore.get('duration')),
             'game_label': boxscore.get('gameLabel'),
-            'game_attendance': boxscore.get('attendance')
+            'game_attendance': boxscore.get('attendance'),
+            'season': game_metadata['season'],
+            'game_type': game_metadata['game_type']
         }
 
 
@@ -305,9 +311,38 @@ class BoxscoreExtractor:
         boxscores = []
         game_id = int(game_json['boxscore']['gameId'])
         
-        if 'postGameData' not in game_json or 'postBoxscoreData' not in game_json['postGameData']:
-            return boxscores
+        # Try to get postBoxscoreData first (preferred source)
+        boxscore_data = None
+        use_fallback = False
         
+        if ('postGameData' in game_json and 
+            'postBoxscoreData' in game_json['postGameData'] and
+            game_json['postGameData']['postBoxscoreData']):
+            
+            boxscore_data = game_json['postGameData']['postBoxscoreData']
+            
+            # Check if postBoxscoreData actually has meaningful content
+            if isinstance(boxscore_data, dict) and boxscore_data:
+                # Check if it has team data with real statistics
+                home_team = boxscore_data.get('homeTeam', {})
+                away_team = boxscore_data.get('awayTeam', {})
+                
+                home_stats = home_team.get('statistics', {})
+                away_stats = away_team.get('statistics', {})
+                
+                # If statistics are empty or only contain dummy keys, use fallback
+                if (not home_stats or 'dummyKey' in home_stats) and (not away_stats or 'dummyKey' in away_stats):
+                    use_fallback = True
+            else:
+                use_fallback = True
+        else:
+            use_fallback = True
+        
+        # Use fallback if postBoxscoreData is not available or contains dummy data
+        if use_fallback:
+            return BoxscoreExtractor._extract_from_boxscore_fallback(game_json)
+        
+        # Continue with existing postBoxscoreData extraction
         boxscore_data = game_json['postGameData']['postBoxscoreData']
         
         # Process home and away team data
@@ -366,6 +401,101 @@ class BoxscoreExtractor:
                             stats=player_stats['statistics']
                         )
                         boxscores.append(boxscore_entry)
+        
+        return boxscores
+    
+    @staticmethod 
+    def _extract_from_boxscore_fallback(game_json: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """
+        Fallback extraction from .boxscore.homeTeam and .boxscore.awayTeam
+        when postBoxscoreData is empty or contains dummy data.
+        
+        For older games (1997-era), check postgameCharts for team statistics.
+        For newer games, check team and player statistics directly.
+        """
+        boxscores = []
+        game_id = int(game_json['boxscore']['gameId'])
+        
+        if 'boxscore' not in game_json:
+            return boxscores
+        
+        boxscore = game_json['boxscore']
+        
+        # First, try extracting from postgameCharts (for older games like 1997)
+        if 'postgameCharts' in boxscore:
+            postgame_charts = boxscore['postgameCharts']
+            
+            for team_key in ['homeTeam', 'awayTeam']:
+                if team_key not in postgame_charts:
+                    continue
+                    
+                team_chart = postgame_charts[team_key]
+                team_stats = team_chart.get('statistics', {})
+                
+                if team_stats and isinstance(team_stats, dict) and 'dummyKey' not in team_stats:
+                    home_away = 'h' if team_key == 'homeTeam' else 'a'
+                    
+                    # Create team totals entry from postgameCharts
+                    boxscore_entry = BoxscoreExtractor._create_boxscore_entry(
+                        game_id=game_id,
+                        team_id=team_chart.get('teamId'),
+                        person_id=None,
+                        home_away_team=home_away,
+                        box_type='totals',
+                        stats=team_stats
+                    )
+                    boxscores.append(boxscore_entry)
+        
+        # If we found data from postgameCharts, return it
+        if boxscores:
+            return boxscores
+        
+        # Fallback to original method: Process home and away teams from boxscore directly
+        for team_key in ['homeTeam', 'awayTeam']:
+            if team_key not in boxscore:
+                continue
+                
+            team_data = boxscore[team_key]
+            home_away = 'h' if team_key == 'homeTeam' else 'a'
+            
+            # Extract team-level statistics if available
+            team_stats = team_data.get('statistics', {})
+            if team_stats and isinstance(team_stats, dict) and 'dummyKey' not in team_stats:
+                # Create team totals entry
+                boxscore_entry = BoxscoreExtractor._create_boxscore_entry(
+                    game_id=game_id,
+                    team_id=team_data.get('teamId'),
+                    person_id=None,
+                    home_away_team=home_away,
+                    box_type='totals',
+                    stats=team_stats
+                )
+                boxscores.append(boxscore_entry)
+            
+            # Extract individual player statistics if available
+            players = team_data.get('players', [])
+            for player in players:
+                if not isinstance(player, dict):
+                    continue
+                    
+                player_stats = player.get('statistics', {})
+                if not player_stats or isinstance(player_stats, dict) and 'dummyKey' in player_stats:
+                    continue
+                
+                # Filter out invalid person IDs (same logic as main extraction)
+                person_id = player.get('personId')
+                if person_id and ((1611661300 <= person_id <= 1611661399) or person_id < 1000):
+                    person_id = None
+                
+                boxscore_entry = BoxscoreExtractor._create_boxscore_entry(
+                    game_id=game_id,
+                    team_id=team_data.get('teamId'), 
+                    person_id=person_id,
+                    home_away_team=home_away,
+                    box_type='player',
+                    stats=player_stats
+                )
+                boxscores.append(boxscore_entry)
         
         return boxscores
     

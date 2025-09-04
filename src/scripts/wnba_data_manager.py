@@ -435,6 +435,25 @@ def main():
             print(f"    Total: {stats['population']['total_games']}")
             print(f"    Success: {stats['population']['successful_games']}")
             print(f"    Failed: {stats['population']['failed_games']}")
+            
+            # Show detailed changes for updated games
+            if stats['verification']['updated'] > 0:
+                print(f"\nDetailed Changes:")
+                for result in stats['verification']['results']:
+                    if result['status'] == 'updated':
+                        changes = result.get('changes', {})
+                        sections = ', '.join(changes.get('sections_changed', []))
+                        total_changes = changes.get('total_changes', 0)
+                        print(f"  Game {result['game_id']}: {total_changes} changes in [{sections}]")
+                        
+                        # Show detailed changes for each section
+                        for section, section_changes in changes.get('details', {}).items():
+                            if section_changes:
+                                print(f"    {section}:")
+                                for change in section_changes[:2]:  # Show first 2 changes per section
+                                    print(f"      • {change}")
+                                if len(section_changes) > 2:
+                                    print(f"      • ... and {len(section_changes) - 2} more changes")
         
         elif args.command == 'verify-repopulate-season':
             if not args.season:
@@ -458,6 +477,25 @@ def main():
             print(f"    Total: {stats['population']['total_games']}")
             print(f"    Success: {stats['population']['successful_games']}")
             print(f"    Failed: {stats['population']['failed_games']}")
+            
+            # Show detailed changes for updated games
+            if stats['verification']['updated'] > 0:
+                print(f"\nDetailed Changes:")
+                for result in stats['verification']['results']:
+                    if result['status'] == 'updated':
+                        changes = result.get('changes', {})
+                        sections = ', '.join(changes.get('sections_changed', []))
+                        total_changes = changes.get('total_changes', 0)
+                        print(f"  Game {result['game_id']}: {total_changes} changes in [{sections}]")
+                        
+                        # Show detailed changes for each section
+                        for section, section_changes in changes.get('details', {}).items():
+                            if section_changes:
+                                print(f"    {section}:")
+                                for change in section_changes[:2]:  # Show first 2 changes per section
+                                    print(f"      • {change}")
+                                if len(section_changes) > 2:
+                                    print(f"      • ... and {len(section_changes) - 2} more changes")
         
         elif args.command == 'full-refresh':
             if not args.game_ids:

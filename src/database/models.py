@@ -136,6 +136,8 @@ class Game(Base):
     game_duration = Column(String(20))
     game_label = Column(String(100))
     game_attendance = Column(Integer)
+    season = Column(Integer)
+    game_type = Column(String(20))
     
     # Relationships
     arena = relationship("Arena", back_populates="games")

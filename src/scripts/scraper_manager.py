@@ -129,6 +129,169 @@ class ScraperManager:
             logger.error(f"Error scraping game {game_url_info.game_id}: {e}")
             return False
     
+    def _detect_data_changes(self, existing_data: Dict[str, Any], fresh_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Detect specific changes between existing and fresh game data.
+        
+        Returns:
+            Dict with detailed change information
+        """
+        changes = {
+            'total_changes': 0,
+            'sections_changed': [],
+            'details': {}
+        }
+        
+        try:
+            # Helper function to safely get nested values
+            def safe_get(data, *keys, default=None):
+                for key in keys:
+                    if isinstance(data, dict) and key in data:
+                        data = data[key]
+                    else:
+                        return default
+                return data
+            
+            # Check game metadata changes
+            game_changes = []
+            
+            # Basic game info
+            existing_status = safe_get(existing_data, 'gameStatus')
+            fresh_status = safe_get(fresh_data, 'gameStatus')
+            if existing_status != fresh_status:
+                game_changes.append(f"Game status: '{existing_status}' → '{fresh_status}'")
+            
+            existing_period = safe_get(existing_data, 'period')
+            fresh_period = safe_get(fresh_data, 'period')
+            if existing_period != fresh_period:
+                game_changes.append(f"Period: {existing_period} → {fresh_period}")
+            
+            # Score changes
+            existing_home_score = safe_get(existing_data, 'homeTeam', 'score')
+            fresh_home_score = safe_get(fresh_data, 'homeTeam', 'score')
+            existing_away_score = safe_get(existing_data, 'awayTeam', 'score')
+            fresh_away_score = safe_get(fresh_data, 'awayTeam', 'score')
+            
+            if existing_home_score != fresh_home_score or existing_away_score != fresh_away_score:
+                game_changes.append(f"Score: {existing_away_score}-{existing_home_score} → {fresh_away_score}-{fresh_home_score}")
+            
+            if game_changes:
+                changes['sections_changed'].append('game_metadata')
+                changes['details']['game_metadata'] = game_changes
+                changes['total_changes'] += len(game_changes)
+            
+            # Check play-by-play changes
+            existing_plays = safe_get(existing_data, 'game', 'actions', default=[])
+            fresh_plays = safe_get(fresh_data, 'game', 'actions', default=[])
+            
+            play_changes = []
+            if len(existing_plays) != len(fresh_plays):
+                play_changes.append(f"Play count: {len(existing_plays)} → {len(fresh_plays)}")
+                changes['total_changes'] += 1
+            
+            # Check for play modifications (sample first 5 differences)
+            max_check = min(len(existing_plays), len(fresh_plays), 100)  # Limit to avoid performance issues
+            play_diffs = 0
+            for i in range(max_check):
+                if i < len(existing_plays) and i < len(fresh_plays):
+                    existing_play = existing_plays[i]
+                    fresh_play = fresh_plays[i]
+                    
+                    # Check key play fields
+                    existing_desc = safe_get(existing_play, 'description', '')
+                    fresh_desc = safe_get(fresh_play, 'description', '')
+                    if existing_desc != fresh_desc and play_diffs < 5:  # Show max 5 examples
+                        play_changes.append(f"Play {i+1} description changed")
+                        play_diffs += 1
+                    
+                    existing_clock = safe_get(existing_play, 'clock')
+                    fresh_clock = safe_get(fresh_play, 'clock')
+                    if existing_clock != fresh_clock and play_diffs < 5:
+                        play_changes.append(f"Play {i+1} clock: {existing_clock} → {fresh_clock}")
+                        play_diffs += 1
+            
+            if play_diffs > 5:
+                play_changes.append(f"... and {play_diffs - 5} more play modifications")
+            
+            if play_changes:
+                changes['sections_changed'].append('play_by_play')
+                changes['details']['play_by_play'] = play_changes
+                changes['total_changes'] += len(play_changes)
+            
+            # Check boxscore/stats changes
+            boxscore_changes = []
+            
+            # Home team stats
+            existing_home_stats = safe_get(existing_data, 'homeTeam', 'statistics', default={})
+            fresh_home_stats = safe_get(fresh_data, 'homeTeam', 'statistics', default={})
+            
+            home_team_name = safe_get(fresh_data, 'homeTeam', 'teamName', 'Home')
+            for stat_key in ['points', 'rebounds', 'assists', 'fieldGoalsMade', 'freeThrowsMade']:
+                existing_val = safe_get(existing_home_stats, stat_key)
+                fresh_val = safe_get(fresh_home_stats, stat_key)
+                if existing_val != fresh_val:
+                    boxscore_changes.append(f"{home_team_name} {stat_key}: {existing_val} → {fresh_val}")
+            
+            # Away team stats  
+            existing_away_stats = safe_get(existing_data, 'awayTeam', 'statistics', default={})
+            fresh_away_stats = safe_get(fresh_data, 'awayTeam', 'statistics', default={})
+            
+            away_team_name = safe_get(fresh_data, 'awayTeam', 'teamName', 'Away')
+            for stat_key in ['points', 'rebounds', 'assists', 'fieldGoalsMade', 'freeThrowsMade']:
+                existing_val = safe_get(existing_away_stats, stat_key)
+                fresh_val = safe_get(fresh_away_stats, stat_key)
+                if existing_val != fresh_val:
+                    boxscore_changes.append(f"{away_team_name} {stat_key}: {existing_val} → {fresh_val}")
+            
+            # Player stats (check if player lists changed)
+            existing_players = safe_get(existing_data, 'game', 'homeTeam', 'players', default=[])
+            fresh_players = safe_get(fresh_data, 'game', 'homeTeam', 'players', default=[])
+            
+            if len(existing_players) != len(fresh_players):
+                boxscore_changes.append(f"Home team player count: {len(existing_players)} → {len(fresh_players)}")
+                changes['total_changes'] += 1
+            
+            existing_away_players = safe_get(existing_data, 'game', 'awayTeam', 'players', default=[])
+            fresh_away_players = safe_get(fresh_data, 'game', 'awayTeam', 'players', default=[])
+            
+            if len(existing_away_players) != len(fresh_away_players):
+                boxscore_changes.append(f"Away team player count: {len(existing_away_players)} → {len(fresh_away_players)}")
+                changes['total_changes'] += 1
+            
+            if boxscore_changes:
+                changes['sections_changed'].append('boxscore_stats')
+                changes['details']['boxscore_stats'] = boxscore_changes
+                changes['total_changes'] += len(boxscore_changes)
+            
+            # Check officials/referees
+            existing_officials = safe_get(existing_data, 'officials', default=[])
+            fresh_officials = safe_get(fresh_data, 'officials', default=[])
+            
+            if len(existing_officials) != len(fresh_officials):
+                changes['sections_changed'].append('officials')
+                changes['details']['officials'] = [f"Official count: {len(existing_officials)} → {len(fresh_officials)}"]
+                changes['total_changes'] += 1
+            
+            # Fallback: if no specific changes detected but data is different
+            if changes['total_changes'] == 0:
+                # Do a high-level JSON comparison to catch any missed changes
+                import json
+                existing_json = json.dumps(existing_data, sort_keys=True)
+                fresh_json = json.dumps(fresh_data, sort_keys=True)
+                
+                if existing_json != fresh_json:
+                    changes['sections_changed'].append('other_data')
+                    changes['details']['other_data'] = ['Unspecified data changes detected']
+                    changes['total_changes'] = 1
+            
+        except Exception as e:
+            logger.warning(f"Error detecting specific changes: {e}")
+            changes['sections_changed'] = ['unknown']
+            changes['details']['unknown'] = [f'Change detection failed: {str(e)}']
+            changes['total_changes'] = 1
+        
+        return changes
+    
     def compare_and_update_game(self, game_url_info: GameURLInfo) -> Dict[str, Any]:
         """
         Re-scrape a game and compare it to existing data. Update if different.
@@ -173,22 +336,31 @@ class ScraperManager:
                     'changes_detected': False
                 }
             
-            # Compare data (deep comparison)
-            import json
-            existing_json = json.dumps(existing_data, sort_keys=True)
-            fresh_json = json.dumps(fresh_data, sort_keys=True)
+            # Detect specific changes
+            changes = self._detect_data_changes(existing_data, fresh_data)
             
-            if existing_json == fresh_json:
+            if changes['total_changes'] == 0:
                 logger.info(f"Game {game_url_info.game_id} data is identical - no update needed")
                 return {
                     'game_id': game_url_info.game_id,
                     'status': 'identical',
                     'action': 'none',
-                    'changes_detected': False
+                    'changes_detected': False,
+                    'changes': changes
                 }
             else:
                 # Data is different - update the database
                 logger.info(f"Game {game_url_info.game_id} has changed data - updating database")
+                logger.info(f"Changes detected in {len(changes['sections_changed'])} sections: {', '.join(changes['sections_changed'])}")
+                
+                # Log specific changes if verbose logging
+                if logger.isEnabledFor(logging.INFO):
+                    for section, section_changes in changes['details'].items():
+                        logger.info(f"  {section}: {len(section_changes)} changes")
+                        for change in section_changes[:3]:  # Show first 3 changes per section
+                            logger.info(f"    - {change}")
+                        if len(section_changes) > 3:
+                            logger.info(f"    - ... and {len(section_changes) - 3} more changes")
                 
                 with DatabaseService() as db:
                     # Delete existing and insert fresh data
@@ -208,7 +380,8 @@ class ScraperManager:
                             'game_id': game_url_info.game_id,
                             'status': 'updated',
                             'action': 'updated',
-                            'changes_detected': True
+                            'changes_detected': True,
+                            'changes': changes
                         }
                     else:
                         logger.error(f"Failed to update game {game_url_info.game_id}")
@@ -216,7 +389,8 @@ class ScraperManager:
                             'game_id': game_url_info.game_id,
                             'status': 'update_failed',
                             'action': 'none',
-                            'changes_detected': True
+                            'changes_detected': True,
+                            'changes': changes
                         }
         
         except Exception as e:
@@ -226,6 +400,7 @@ class ScraperManager:
                 'status': 'error',
                 'action': 'none',
                 'changes_detected': False,
+                'changes': {'total_changes': 0, 'sections_changed': [], 'details': {}},
                 'error': str(e)
             }
     
@@ -541,16 +716,22 @@ class ScraperManager:
     
     def _determine_season_from_game_id(self, game_id: str) -> int:
         """Determine the season from game ID format."""
-        # WNBA game IDs follow format: 1SYYTTGGG where SYY is season (e.g., 024 = 2024)
-        if len(game_id) >= 5:
-            season_part = game_id[1:4]  # Extract SYY part
-            if season_part.startswith('0'):
-                # Format: 024 -> 2024, 023 -> 2023, etc.
-                year_suffix = int(season_part[1:])
-                if year_suffix >= 97:  # 1997
+        # WNBA game IDs follow format: 10SYY00GGG where:
+        # - 10 = League prefix
+        # - S = Season type (2=regular, 4=playoff) 
+        # - YY = Year (24=2024, 23=2023, etc.)
+        # - 00 = Fixed padding
+        # - GGG = Game number
+        if len(game_id) >= 6:
+            season_part = game_id[3:5]  # Extract YY part from position 3-4
+            try:
+                year_suffix = int(season_part)
+                if year_suffix >= 97:  # 1997-1999
                     return 1900 + year_suffix
                 else:  # 2000+
                     return 2000 + year_suffix
+            except ValueError:
+                pass
         
         # Fallback - assume recent season
         logger.warning(f"Could not determine season from game_id {game_id}, assuming 2024")
@@ -941,7 +1122,19 @@ def main():
                 print(f"\nGames that were updated:")
                 for result in stats['results']:
                     if result['status'] == 'updated':
-                        print(f"  - Game {result['game_id']}: Updated with fresh data")
+                        changes = result.get('changes', {})
+                        sections = ', '.join(changes.get('sections_changed', []))
+                        total_changes = changes.get('total_changes', 0)
+                        print(f"  - Game {result['game_id']}: {total_changes} changes in [{sections}]")
+                        
+                        # Show detailed changes for each section
+                        for section, section_changes in changes.get('details', {}).items():
+                            if section_changes:
+                                print(f"    {section}:")
+                                for change in section_changes[:2]:  # Show first 2 changes per section
+                                    print(f"      • {change}")
+                                if len(section_changes) > 2:
+                                    print(f"      • ... and {len(section_changes) - 2} more changes")
             
             if stats['failed'] > 0:
                 print(f"\nFailed games:")
@@ -968,7 +1161,19 @@ def main():
                 print(f"\nGames that were updated:")
                 for result in stats['results']:
                     if result['status'] == 'updated':
-                        print(f"  - Game {result['game_id']}: Updated with fresh data")
+                        changes = result.get('changes', {})
+                        sections = ', '.join(changes.get('sections_changed', []))
+                        total_changes = changes.get('total_changes', 0)
+                        print(f"  - Game {result['game_id']}: {total_changes} changes in [{sections}]")
+                        
+                        # Show detailed changes for each section
+                        for section, section_changes in changes.get('details', {}).items():
+                            if section_changes:
+                                print(f"    {section}:")
+                                for change in section_changes[:2]:  # Show first 2 changes per section
+                                    print(f"      • {change}")
+                                if len(section_changes) > 2:
+                                    print(f"      • ... and {len(section_changes) - 2} more changes")
             
             if stats['failed'] > 0:
                 print(f"\nFailed games:")

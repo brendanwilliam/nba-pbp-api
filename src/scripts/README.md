@@ -586,3 +586,26 @@ The unified manager coordinates:
 - **`verify-repopulate-season`**: Regular data quality checks and updates for entire seasons
 - **`full-refresh`**: When data corruption or major issues detected
 - **Individual operations**: When you need only scraping or population
+
+## 🎮 **Game ID Format Reference**
+
+WNBA game IDs follow this pattern: `10SYY00GGG`
+
+| Position | Digits | Description | Values |
+|----------|--------|-------------|---------|
+| 1-2      | `10`   | League identifier | Always `10` |
+| 3        | `S`    | Season type | `2` = Regular season, `4` = Playoff |
+| 4-5      | `YY`   | Year (last 2 digits) | `97`=1997, `24`=2024, etc. |
+| 6-7      | `00`   | Fixed padding | Always `00` |
+| 8-10     | `GGG`  | Game number | `001`, `150`, etc. |
+
+**Examples:**
+- `1022400001` = 2024 regular season game 1
+- `1042400001` = 2024 playoff game 1 
+- `1022300150` = 2023 regular season game 150
+- `1029700001` = 1997 regular season game 1 (inaugural season)
+
+**How to Find Game IDs:**
+- Check existing data: `python -m src.database.database_stats --local`
+- Generate from CSV files: See `src/scrapers/wnba-games-*.csv`
+- Pattern matching: Regular season games typically range 001-200+ per season
