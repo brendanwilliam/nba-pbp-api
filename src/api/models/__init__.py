@@ -1,1 +1,0 @@
-# Models package for API data structures

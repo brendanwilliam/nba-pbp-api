@@ -4,10 +4,58 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is an NBA play-by-play data API project that scrapes game data from the official NBA website, stores it in PostgreSQL, and provides both REST API and MCP server interfaces for querying the data.
+This is a WNBA play-by-play data scraping and analytics project that extracts game data from the official WNBA website, stores it in PostgreSQL, and provides essential basketball analytics including possession and lineup tracking. The project focuses specifically on WNBA data collection and processing, without API or MCP server components.
 
-## Running Scripts/Code
-Make sure to activate the virtual environment before running any scripts. You can do this by running `source venv/bin/activate` in the root directory of the project.
+## Common Development Commands
+
+### Environment Setup
+```bash
+# Always activate virtual environment first
+source venv/bin/activate
+
+# Install/update dependencies
+pip install -r requirements.txt
+```
+
+### Testing
+```bash
+# Run all tests
+pytest
+
+# Run specific test file
+pytest tests/test_queue_offline.py
+
+# Run tests with verbose output
+pytest -v tests/
+```
+
+### Database Management
+```bash
+# Database setup and migrations (recommended approach)
+python -m src.database.database            # Create DB, run migrations, test connection
+python -m src.database.database migrate    # Create DB and run migrations only
+python -m src.database.database status     # Check migration status
+python -m src.database.database create     # Create database only
+
+# Direct Alembic commands (advanced usage)
+alembic revision --autogenerate -m "description"  # Generate new migration
+alembic upgrade head                               # Apply migrations directly
+
+# Database synchronization commands (see Database Management section below)
+python -m src.database.selective_sync --analyze
+```
+
+### WNBA Data Scraping
+```bash
+# Build game URL queue for WNBA seasons
+python -m src.scripts.build_game_url_queue
+
+# Test scraping system offline
+python -m tests.test_queue_offline
+
+# Run mass scraping (use with caution)
+python -m src.scripts.mass_game_scraper
+```
 
 ## Claude Code Guidelines
 - Before writing code, write your plan to `instructions/` as a markdown file. After writing the plan, write your code to a branch that has the same name as the plan.
@@ -22,128 +70,82 @@ The project follows a modular architecture with completed and planned components
 
 ### Completed Components ✅
 
-- **src/scrapers/**: Web scraping logic for NBA.com game data
-  - `team_mapping.py`: NBA team abbreviation mapping with historical changes (relocations, name changes)
-  - `game_url_generator.py`: URL discovery and generation system for all seasons 1996-2025
+- **src/scrapers/**: Web scraping logic for WNBA.com game data
+  - `team_mapping.py`: WNBA team abbreviation mapping with historical changes (relocations, name changes)
+  - `game_url_generator.py`: URL discovery and generation system for WNBA seasons
   - `url_validator.py`: URL accessibility and content validation with concurrent processing
-  - `game_data_scraper.py`: JSON data extraction from `#__NEXT_DATA__` script tags
-  - `scraping_manager.py`: Coordinated scraping operations with queue management
+  - `mass_data_extractor.py`: JSON data extraction from `#__NEXT_DATA__` script tags
+  - `mass_scraping_queue.py`: Coordinated scraping operations with queue management
 
-- **src/core/**: Core business logic and data models
-  - `database.py`: Database connection and session management
-  - `models.py`: SQLAlchemy models for teams, games, players, queue management
-
-- **src/database/**: Database schema and queue management
-  - `queue_schema.sql`: Enhanced scraping queue structure with comprehensive indexing
-  - `enhanced_schema.sql`: Comprehensive normalized database schema for NBA game data
+- **src/database/**: Database layer with modern ORM architecture
+  - `database.py`: Database creation, Alembic migration management, and CLI interface
+  - `models.py`: SQLAlchemy ORM models (RawGameData with JSONB, ScrapingSession, DatabaseVersion)  
+  - `services.py`: Service layer for clean database operations with context management
   - `queue_manager.py`: Queue operations, status tracking, and progress monitoring
   - `database_stats.py`: Comprehensive database statistics and monitoring tool (CLI + module)
-  - `database_comparison.py`: Compare schemas and data between local and cloud databases
+  - `selective_sync.py`: Efficient table-by-table synchronization between databases
   - `synchronise_databases.py`: Full database synchronization from local to cloud with migrations
 
-- **src/data_quality/**: Data validation and quality assurance
-  - `validation_framework.py`: Comprehensive validation framework for NBA JSON data
-
-- **src/scripts/**: Execution scripts and utilities (continued)
-  - `json_structure_analyzer.py`: JSON structure analysis across all seasons
+- **src/analytics/**: Essential basketball analytics and tracking systems
 
 - **src/scripts/**: Execution scripts and utilities
-  - `build_game_url_queue.py`: Main script for URL queue generation and management
-  - `test_queue_offline.py`: Comprehensive testing framework for all components
-  - `comprehensive_coverage_report.py`: Gap analysis across all game types and eras
-  - `verify_game_id_sequences.py`: Regular season sequence coverage verification
-  - `verify_playoff_sequences.py`: Playoff tournament structure validation
-  - `retrieve_identified_gaps.py`: Active retrieval of missing games from gap analysis
-  - `mass_game_scraper.py`: Concurrent mass scraping with worker threads and rate limiting
 
-### Planned Components 📋
+### Focus Areas 🎯
 
-- **src/api/**: RESTful API endpoints for querying scraped data
-  - Query plays by team, player, game, time, date, shot clock, score
-
-- **src/analytics/**: Data analysis and insights generation
+This WNBA scraping project is streamlined to focus on:
+- **Data Collection**: Efficient scraping of WNBA.com game data
+- **Data Storage**: Normalized PostgreSQL database with comprehensive schema
+- **Essential Analytics**: Possession tracking and lineup analysis only
+- **Data Quality**: Validation and quality assurance for scraped data
 
 ### Database Infrastructure ✅
 
-- **PostgreSQL**: Enhanced schema for storing games, play-by-play events, box scores, and metadata
-- **Tables**: `teams`, `games`, `players`, `game_url_queue`, `raw_game_data`, `scrape_queue`
-- **Indexing**: Optimized for status, season, date, and priority-based queries
-- **Migration System**: Alembic-based schema versioning
+- **PostgreSQL**: Modern ORM-based schema with SQLAlchemy models
+- **Database Name**: `wnba` (local development database)  
+- **Core Tables**: `raw_game_data` (JSONB), `scraping_sessions`, `database_versions`
+- **Migration System**: Alembic with automated database creation and version management
+- **Service Layer**: Context-managed database operations through `services.py`
+- **Performance**: JSONB indexing for efficient game data queries
+
+## Database Service Layer Architecture
+
+The project uses a clean service layer pattern for database operations:
+
+### Core Components
+- **`DatabaseService`**: Main coordinator with context management
+- **`GameDataService`**: Handles raw game data CRUD operations  
+- **`ScrapingSessionService`**: Manages scraping session tracking
+
+### Usage Patterns
+```python
+# Simple operations
+from src.database.services import insert_scraped_game
+success = insert_scraped_game(game_id, season, game_type, url, data)
+
+# Complex operations with context management
+from src.database.services import DatabaseService
+with DatabaseService() as db:
+    game = db.game_data.get_game_data(game_id)
+    session = db.scraping_session.start_session("My Session")
+```
+
+### Key Benefits
+- **Automatic session management** with context managers
+- **Error handling and rollback** built-in
+- **Type-safe operations** with proper validation
+- **Clean separation** between data access and business logic
 
 ## Development Setup
 
-This is a Python project. When setting up:
+This is a Python project focused on WNBA data scraping. When setting up:
 
 1. Create and activate a virtual environment before any Python operations
-2. Database configuration will be needed for PostgreSQL connection
-3. The project will require web scraping libraries for NBA.com data extraction
+2. Database configuration will be needed for PostgreSQL connection (environment variables)
+3. The project requires web scraping libraries for WNBA.com data extraction
 
 ## Database Management
 
 The project includes comprehensive database management tools for development and deployment:
-
-### Key Commands
-```bash
-# Monitor database statistics and progress
-python -m src.database.database_stats --local   # Local database
-python -m src.database.database_stats --neon    # Cloud database
-
-# Compare local and cloud databases for differences
-python -m src.database.database_comparison
-
-# Selective synchronization (recommended for routine updates)
-python -m src.database.selective_sync --analyze --ignore-size    # Check differences
-python -m src.database.selective_sync --sync --dry-run --ignore-size  # Preview sync
-python -m src.database.selective_sync --sync raw_game_data       # Sync specific table
-
-# Full synchronization (for major updates)
-python -m src.database.synchronise_databases --dry-run  # Preview first
-python -m src.database.synchronise_databases            # Full deployment
-```
-
-### Development Workflow
-
-#### For Routine Updates (Recommended)
-1. **Develop locally** with full 23M+ row dataset in PostgreSQL
-2. **Analyze differences** to see what changes need deployment:
-   ```bash
-   python -m src.database.selective_sync --analyze --ignore-size
-   ```
-3. **Preview selective sync** with dry-run to validate changes:
-   ```bash
-   python -m src.database.selective_sync --sync --dry-run --ignore-size
-   ```
-4. **Deploy specific changes** table by table:
-   ```bash
-   python -m src.database.selective_sync --sync raw_game_data teams
-   ```
-
-#### For Major Updates (Schema Changes)
-1. **Compare full databases** to see comprehensive differences:
-   ```bash
-   python -m src.database.database_comparison
-   ```
-2. **Preview full synchronization** with dry-run:
-   ```bash
-   python -m src.database.synchronise_databases --dry-run
-   ```
-3. **Deploy to cloud** with full data and schema synchronization:
-   ```bash
-   python -m src.database.synchronise_databases
-   ```
-
-### Database Synchronization Tools
-
-#### Selective Sync Tool (src/database/selective_sync.py)
-**Recommended for routine updates** - Efficient table-by-table synchronization
-
-**Key Features:**
-- Smart difference detection (schema, row count, significant size changes)
-- Auto-sync mode: Finds and syncs all different tables automatically
-- Manual sync: Sync specific tables only
-- Large table protection: Tables >1M rows require `--force` flag
-- Schema-only or data-only sync options
-- Comprehensive safety features with automatic backups
 
 **Common Usage Patterns:**
 ```bash
@@ -174,49 +176,27 @@ python -m src.database.selective_sync --sync --dry-run
 
 The full synchronization tool handles:
 - Alembic schema migrations
-- Complete data replacement (23.6M+ rows)
+- Complete data replacement with WNBA dataset
 - Sequence updates and foreign key constraints
 - Batch processing for large datasets
 - Error handling and rollback capabilities
 
 ## Key Implementation Details
 
-- The NBA.com game pages contain play-by-play data in a `#__NEXT_DATA__` script tag as JSON
-- Game URLs follow the pattern: `nba.com/game/{away_team}-vs-{home_team}-{game_id}`
-- The scraper needs to handle a queue system to track scraping status and manage the large volume of games (1996-2025)
-- The MCP server will translate natural language queries to database queries for LLM integration
+- The WNBA.com game pages contain play-by-play data in a `#__NEXT_DATA__` script tag as JSON (same structure as NBA)
+- Game URLs follow the pattern: `wnba.com/game/{away_team}-vs-{home_team}-{game_id}`
+- The scraper uses a queue system to track scraping status and manage WNBA games across seasons
+- Essential analytics focus on possession tracking and lineup analysis only
 
-## Current Status
-Please use this section to keep track of high-level objectives and their status. Copy the contents over to `README.md` whenever you update this section.
+## Database Schema Reference
 
-### Objectives
+**IMPORTANT**: When writing SQL queries or working with the database, always reference the complete database schema documentation in `src/database/README.md`. This file contains:
 
-#### Completed Objectives ✅
-- [x] Create plans for all objectives
-- [x] Start small batch test scraping of NBA.com game pages (December 2024) to ensure functionality
-- [x] Create a systematic plan to scrape all games from the 1996-97 season to the 2024-25 season
-- [x] **Build comprehensive game URL queue system (~30,000 games)**
-- [x] **Implement team mapping with historical changes (relocations, name changes)**
-- [x] **Create URL validation and accessibility testing framework**
-- [x] **Set up enhanced database schema with proper indexing**
-- [x] **Comprehensive gap analysis and coverage verification system**
-- [x] **Automated missing game retrieval and queue completion**
-- [x] **Analyze JSON data and design comprehensive database schema (Plan 09)**
+- **Exact table names and column names** for all database tables
+- **Data types and constraints** for each column
+- **Relationships and foreign keys** between tables
+- **Common query patterns** and example SQL queries for WNBA analytics
+- **Database views** available for simplified queries
 
-#### In Progress 🔄
-- [ ] Execute mass game scraping from populated URL queue (Plan 08)
-- [ ] Implement complete database schema for parsed data (Plan 10)
-
-#### Planned 📋
-- [ ] Use JSON data to populate normalized database tables (Plan 11)
-- [ ] Migrate database to cloud infrastructure (Plan 12)
-- [ ] Create REST API endpoints for querying the database (Plan 13)
-- [ ] Create MCP server for LLM integration (Plan 14)
-- [ ] Create documentation for the API and MCP server (Plan 15)
-- [ ] Create a website for testing the API and MCP server (Plan 16)
-- [ ] Plan how to create a userbase for the API and MCP servers (Plan 17)
-- [ ] Plan how to make money from the API and MCP servers (Plan 18)
-- [ ] Plan how to scale the API and MCP servers (Plan 19)
-- [ ] Plan how to maintain the API and MCP servers (Plan 20)
-- [ ] Plan how to update the API and MCP servers (Plan 21)
+This prevents hallucination of non-existent tables or columns and ensures accurate SQL query generation.
 

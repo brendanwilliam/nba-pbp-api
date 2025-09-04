@@ -1,290 +1,611 @@
-# Scripts Module
+# Scripts Directory
 
-This module contains executable Python scripts for managing NBA game scraping operations, data processing, and database population. All scripts have been streamlined to support the current project objectives (Plan 10: Enhanced Database Schema Implementation).
+This directory contains executable scripts for WNBA data scraping and management operations.
 
-## Core Scripts Overview
+## Scraper Manager
 
-### Data Processing & Schema Population
+The `scraper_manager.py` module provides a comprehensive CLI interface for scraping WNBA game data from the official WNBA website.
 
-#### populate_enhanced_schema.py
-**Purpose**: Core script for migrating raw JSON data to the enhanced database schema tables. Processes games, players, play events, team stats, and more.
+### Prerequisites
 
-**Usage**:
+Ensure you have activated the virtual environment and set up the database:
+
 ```bash
-python src/scripts/populate_enhanced_schema.py
+source venv/bin/activate
+python -m src.database.database  # Setup database and run migrations
 ```
 
-**Key Features**:
-- Extracts structured data from raw JSON game files
-- Populates enhanced_games, play_events, player_game_stats, team_game_stats tables
-- Handles data validation and error recovery
-- Progress tracking and batch processing
-- Essential for Plan 10 implementation
+### Basic Usage
 
----
-
-#### fix_play_events_data.py
-**Purpose**: Reprocesses existing play_events records to fix missing shot coordinates, shot types, and possession detection.
-
-**Usage**:
 ```bash
-python src/scripts/fix_play_events_data.py
+python -m src.scripts.scraper_manager COMMAND [OPTIONS]
 ```
 
-**Key Features**:
-- Fixes missing shot coordinate data
-- Enhances shot type classification
-- Improves possession tracking accuracy
-- Data quality improvement for existing schema
+### Available Commands
 
----
-
-### Scraping & Queue Management
-
-#### build_game_url_queue.py
-**Purpose**: Main script for discovering and populating NBA game URLs for systematic scraping. Builds comprehensive queue of all NBA games from 1996-2025.
-
-**Command Line Arguments**:
-- `--seasons` (list): Specific seasons to process
-- `--dates` (list): Specific dates to process (supports YYYY-MM-DD, YYYYMMDD, or MM/DD/YYYY formats)
-- `--validate` (flag): Validate URLs after generation
-- `--validate-only` (flag): Only validate existing URLs in the queue
-- `--stats-only` (flag): Show queue statistics without building
-- `--limit` (int): Limit number of URLs to validate
-- `--status` (str): Status of URLs to validate
-
-**Usage**:
+#### Single Season Scraping
 ```bash
-# Build full queue for all seasons
-python src/scripts/build_game_url_queue.py
+# Scrape entire 2024 regular season
+python -m src.scripts.scraper_manager scrape-season --season 2024 --game-type regular
 
-# Build queue for specific seasons with validation
-python src/scripts/build_game_url_queue.py --seasons 2023-24 2024-25 --validate
+# Scrape 2024 playoff games
+python -m src.scripts.scraper_manager scrape-season --season 2024 --game-type playoff
 
-# Just show statistics
-python src/scripts/build_game_url_queue.py --stats-only
-
-# Validate existing URLs (auto-converts invalid to pending)
-python src/scripts/build_game_url_queue.py --validate-only --limit 100
+# Test with limited games (recommended for first run)
+python -m src.scripts.scraper_manager scrape-season --season 2024 --max-games 10 --verbose
 ```
 
----
-
-#### mass_game_scraper.py
-**Purpose**: Main orchestration script for mass NBA game scraping with concurrent workers, rate limiting, and comprehensive error handling.
-
-**Command Line Arguments**:
-- `--batch-size` (int, default=100): Batch size for processing
-- `--max-workers` (int, default=4): Maximum concurrent workers
-- `--max-batches` (int): Maximum batches to process
-- `--season` (str): Filter by specific season
-- `--rate-limit` (float, default=0.5): Requests per second
-- `--db-url` (str): Database URL override
-
-**Usage**:
+#### Bulk Season Scraping
 ```bash
-# Run full scraping with default settings
-python src/scripts/mass_game_scraper.py
+# Scrape ALL regular season games (1997-2025)
+python -m src.scripts.scraper_manager scrape-all-regular
 
-# Scrape specific season with custom settings
-python src/scripts/mass_game_scraper.py --season 2023-24 --batch-size 50 --max-workers 2
+# Scrape ALL playoff games (1997-2025) 
+python -m src.scripts.scraper_manager scrape-all-playoff
 
-# Run limited test scraping
-python src/scripts/mass_game_scraper.py --max-batches 5 --rate-limit 1.0
+# Scrape ALL games (both regular and playoff for all seasons)
+python -m src.scripts.scraper_manager scrape-all-games
+
+# Test bulk scraping with limited total games
+python -m src.scripts.scraper_manager scrape-all-regular --max-games 50 --verbose
+python -m src.scripts.scraper_manager scrape-all-games --max-games 100 --verbose
 ```
 
-**Key Features**:
-- Concurrent scraping with thread pool management
-- Rate limiting and adaptive backoff strategies
-- Graceful shutdown handling (SIGINT/SIGTERM)
-- Automatic retry for failed games
-- Real-time progress tracking and statistics
-
----
-
-### Monitoring & Analysis
-
-#### scraping_monitor.py
-**Purpose**: Real-time monitoring dashboard for tracking mass scraping progress, with both live dashboard and report export capabilities.
-
-**Command Line Arguments**:
-- `--refresh` (int, default=30): Refresh interval in seconds
-- `--once` (flag): Show dashboard once and exit
-- `--export` (str): Export report to JSON file
-- `--db-url` (str): Database URL override
-
-**Usage**:
+#### Test Single Game
 ```bash
-# Live monitoring with 30-second refresh
-python src/scripts/scraping_monitor.py
-
-# Show dashboard once and exit
-python src/scripts/scraping_monitor.py --once
-
-# Export report to JSON file
-python src/scripts/scraping_monitor.py --export scraping_report.json
+# Test scraping a specific game
+python -m src.scripts.scraper_manager test-single --game-id 1022400001 --season 2024
 ```
 
-**Dashboard Information**:
-- Queue status (completed, pending, in progress, failed, invalid)
-- Performance metrics (completion rate, current speed)
-- Season progress (top 5 seasons by activity)
-- Error analysis and failure patterns
-- Recent failures with error details
-
----
-
-#### comprehensive_coverage_report.py
-**Purpose**: Comprehensive gap analysis across all NBA game types and eras to identify missing games and coverage issues.
-
-**Usage**:
+#### Game Verification and Updates
 ```bash
-python src/scripts/comprehensive_coverage_report.py
+# Verify and update specific games (re-scrape and compare to existing data)
+python -m src.scripts.scraper_manager verify-games --game-ids 1022400001 1022400002
+
+# Verify and update entire season
+python -m src.scripts.scraper_manager verify-season --season 2024 --game-type regular
+
+# Use with verbose logging to see comparison details
+python -m src.scripts.scraper_manager verify-games --game-ids 1022400001 --verbose
+python -m src.scripts.scraper_manager verify-season --season 2024 --verbose
+
+# Limit verification to subset of games for testing
+python -m src.scripts.scraper_manager verify-season --season 2024 --max-games 10
 ```
 
-**Key Features**:
-- Analyzes regular season game ID sequences for completeness (1996-2024)
-- Validates early playoff numbering (1996-2000) with sparse sequential IDs
-- Checks modern playoff structure (2001+) using round/series/game format
-- Identifies missing games, extra games, and structural issues
-- Provides prioritized recommendations for gap filling
-- Handles different game ID patterns by era
-
----
-
-#### audit_scraped_games.py
-**Purpose**: Comprehensive analysis of scraped NBA games data with detailed breakdown by season, type, and status.
-
-**Usage**:
+#### Session Management
 ```bash
-python src/scripts/audit_scraped_games.py
+# List all active scraping sessions
+python -m src.scripts.scraper_manager list-sessions
 ```
 
-**Key Features**:
-- Database auditing and progress tracking
-- Season-by-season breakdown of scraped vs expected games
-- Game type analysis (regular season, playoffs, play-in)
-- Status tracking for scraping queue
-- Data quality metrics and reporting
+### Command Options
 
----
+| Option | Description | Example |
+|--------|-------------|---------|
+| `--season YEAR` | WNBA season year (required for most commands) | `--season 2024` |
+| `--game-type TYPE` | Game type: `regular` or `playoff` (default: regular) | `--game-type playoff` |
+| `--max-games N` | Limit scraping to N games per season OR total games for bulk commands | `--max-games 5` |
+| `--game-id ID` | Specific game ID (for test-single) | `--game-id 1022400001` |
+| `--game-ids ID [ID...]` | Multiple game IDs (for scrape-games, verify-games) | `--game-ids 1022400001 1022400002` |
+| `--override` | Override existing games - re-scrape games that already exist | `--override` |
+| `--verbose, -v` | Enable verbose logging | `--verbose` |
 
-### Analysis & Development Tools
+### Examples
 
-#### json_structure_analyzer.py
-**Purpose**: Analyzes JSON structure evolution across different seasons to understand schema changes and data availability.
-
-**Usage**:
+#### Production Scraping
 ```bash
-python src/scripts/json_structure_analyzer.py
+# Single season scraping
+python -m src.scripts.scraper_manager scrape-season --season 2024
+python -m src.scripts.scraper_manager scrape-season --season 2023 --game-type playoff
+
+# Bulk scraping (all seasons)
+python -m src.scripts.scraper_manager scrape-all-regular    # All regular seasons (1997-2025)
+python -m src.scripts.scraper_manager scrape-all-playoff    # All playoff seasons (1997-2025)
+python -m src.scripts.scraper_manager scrape-all-games      # EVERYTHING (regular + playoff)
 ```
 
-**Key Features**:
-- Schema design and understanding data evolution
-- Tracks field availability across seasons
-- Identifies new data fields and deprecated ones
-- Helps inform database schema decisions
-- Useful for Plan 10 schema development
-
----
-
-#### backfill_lineup_tracking_enhanced.py
-**Purpose**: Enhanced version of lineup tracking backfill with memory monitoring and optimization for large-scale processing.
-
-**Usage**:
+#### Development/Testing
 ```bash
-python src/scripts/backfill_lineup_tracking_enhanced.py
+# Single season testing
+python -m src.scripts.scraper_manager scrape-season --season 2024 --max-games 5 --verbose
+
+# Bulk scraping testing (limit total games across all seasons)
+python -m src.scripts.scraper_manager scrape-all-regular --max-games 10 --verbose   # 10 total games max
+python -m src.scripts.scraper_manager scrape-all-games --max-games 20 --verbose     # 20 total games max
+
+# Test single game extraction
+python -m src.scripts.scraper_manager test-single --game-id 1022400001 --season 2024 --verbose
 ```
 
-**Key Features**:
-- Enhanced lineup tracking algorithm
-- Memory usage monitoring and optimization
-- Batch processing for large datasets
-- Progress tracking and error recovery
-- Supports Plan 10 lineup tracking tables
+### Features
 
----
+- **Session Tracking**: All scraping operations are tracked in the `scraping_sessions` database table
+- **Progress Monitoring**: Real-time progress updates every 10 games
+- **Duplicate Detection**: Automatically skips games that already exist in the database
+- **Game Verification**: Re-scrape and compare games to detect data changes
+- **Data Updates**: Automatically update games when source data changes
+- **Error Handling**: Robust error handling with detailed logging
+- **Rate Limiting**: Built-in delays to be respectful to the WNBA website
+- **Logging**: Comprehensive logging to both console and `scraper_manager.log` file
 
-## Workflow Patterns
+### Output
 
-### Plan 10 Implementation Workflow
-```bash
-# 1. Ensure data is available
-python src/scripts/comprehensive_coverage_report.py
+The scraper provides detailed statistics after each run:
 
-# 2. Populate enhanced schema from raw JSON
-python src/scripts/populate_enhanced_schema.py
-
-# 3. Fix any data quality issues
-python src/scripts/fix_play_events_data.py
-
-# 4. Audit results
-python src/scripts/audit_scraped_games.py
+```
+Scraping Results for 2024 regular season:
+  Total games: 240
+  Successfully scraped: 235
+  Failed: 2
+  Skipped (already exist): 3
 ```
 
-### Ongoing Scraping Operations
+### Monitoring
+
+- Check active sessions: Use `list-sessions` command
+- View logs: Check `scraper_manager.log` file
+- Database status: Use `python -m src.database.database_stats --local`
+
+### Troubleshooting
+
+1. **Import Errors**: Ensure virtual environment is activated
+2. **Database Errors**: Run database setup: `python -m src.database.database`
+3. **Network Issues**: Check internet connection and try with `--verbose` flag
+4. **Rate Limiting**: The scraper includes automatic delays, but you can restart if needed
+
+### Integration
+
+The scraper manager integrates with:
+- `game_url_generator`: For systematic URL generation across seasons
+- `raw_data_extractor`: For extracting JSON data from WNBA.com pages  
+- `database.services`: For session tracking and data storage
+- Database models: `raw_game_data` and `scraping_sessions` tables
+
+## Game Table Population
+
+The `populate_game_tables.py` script transforms raw scraped WNBA game data into normalized database tables. It reads JSON data from the `raw_game_data` table and populates 8 normalized tables for analytics and querying.
+
+### Prerequisites
+
+Ensure you have scraped game data available in the database:
+
 ```bash
-# 1. Build/update URL queue
-python src/scripts/build_game_url_queue.py --validate
-
-# 2. Start mass scraping
-python src/scripts/mass_game_scraper.py --season 2024-25
-
-# 3. Monitor progress (in another terminal)
-python src/scripts/scraping_monitor.py
-
-# 4. Generate status report
-python src/scripts/scraping_monitor.py --export status.json
+source venv/bin/activate
+python -m src.database.database  # Setup database and run migrations
+# First scrape some games (see Scraper Manager section above)
 ```
 
-### Maintenance & Quality Assurance
+### Basic Usage
+
 ```bash
-# Check coverage and identify gaps
-python src/scripts/comprehensive_coverage_report.py
-
-# Analyze JSON structure evolution
-python src/scripts/json_structure_analyzer.py
-
-# Audit database state
-python src/scripts/audit_scraped_games.py
-
-# Validate URLs in queue
-python src/scripts/build_game_url_queue.py --validate-only --limit 1000
+python -m src.scripts.populate_game_tables [MODE] [OPTIONS]
 ```
 
-## Script Dependencies
+### Population Modes
 
-All scripts follow consistent patterns:
-- **Environment Setup**: Require virtual environment activation (`source venv/bin/activate`)
-- **Database Connection**: Use PostgreSQL connection from environment variables
-- **Async Operations**: Use asyncio for efficient concurrent processing
-- **Comprehensive Logging**: Detailed logging with multiple severity levels
-- **Error Handling**: Robust error handling with graceful degradation
-- **Progress Tracking**: Real-time progress updates and statistics
-- **Configuration**: Environment variable and command-line configuration
+#### Process All Games
+```bash
+# Populate all games from raw_game_data table
+python -m src.scripts.populate_game_tables --all
 
-## Database Integration
+# Limit number of games processed
+python -m src.scripts.populate_game_tables --all --limit 100
 
-Scripts interact with key database tables:
-- `game_url_queue` - URL discovery and validation tracking
-- `raw_game_data` - Scraped JSON data storage
-- `enhanced_games` - Structured game information
-- `play_events` - Individual play-by-play events
-- `player_game_stats` - Player performance data
-- `team_game_stats` - Team performance data
-- `scraping_sessions` - Scraping operation tracking
-- `scraping_errors` - Error logging and analysis
+# Resume from a specific game ID (useful for large datasets)
+python -m src.scripts.populate_game_tables --all --resume-from 1022400150
+```
 
-## Recent Changes (Script Cleanup)
+#### Process Specific Games
+```bash
+# Process specific game IDs
+python -m src.scripts.populate_game_tables --games 1022400001 1022400002 1022400003
 
-**Removed Scripts (No Longer Needed)**:
-- `retrieve_identified_gaps.py` - Superseded by comprehensive coverage system
-- `verify_game_id_sequences.py` - Functionality moved to comprehensive_coverage_report.py
-- `verify_playoff_sequences.py` - Functionality moved to comprehensive_coverage_report.py
-- `manual_queue_manager.py` - Manual processes have been automated
-- `sample_json_extractor.py` - One-time task completed
-- `enhanced_games_coverage_audit.py` - Duplicate functionality
-- `backfill_lineup_tracking.py` - Superseded by enhanced version
-- `migrate_lineup_tracking_v2.py` - One-time migration completed
+# Process a single game
+python -m src.scripts.populate_game_tables --games 1022400001
+```
 
-The scripts module has been streamlined from 19 to 11 scripts, reducing maintenance overhead by 42% while maintaining all essential functionality for Plan 10 and ongoing operations.
+#### Process by Season
+```bash
+# Process all games from specific seasons
+python -m src.scripts.populate_game_tables --seasons 2024
+
+# Process multiple seasons
+python -m src.scripts.populate_game_tables --seasons 2023 2024
+
+# Limit games per season
+python -m src.scripts.populate_game_tables --seasons 2024 --limit 50
+```
+
+### Command Options
+
+| Option | Description | Example |
+|--------|-------------|---------|
+| `--all` | Process all games in raw_game_data table | `--all` |
+| `--games ID [ID...]` | Process specific game IDs | `--games 1022400001 1022400002` |
+| `--seasons YEAR [YEAR...]` | Process games from specific seasons | `--seasons 2024` |
+| `--limit N` | Limit number of games to process | `--limit 100` |
+| `--resume-from ID` | Resume processing from game ID (--all only) | `--resume-from 1022400150` |
+| `--validate` | Validate foreign key integrity after population | `--validate` |
+| `--dry-run` | Show what would be processed without processing | `--dry-run` |
+| `--override` | Override existing data - clear and repopulate games that already exist | `--override` |
+
+### Examples
+
+#### Production Population
+```bash
+# Populate all available games
+python -m src.scripts.populate_game_tables --all --validate
+
+# Populate 2024 season with validation
+python -m src.scripts.populate_game_tables --seasons 2024 --validate
+
+# Populate specific games that failed previously
+python -m src.scripts.populate_game_tables --games 1022400001 1022400005 1022400010
+
+# Re-populate games with updated extractors (override existing data)
+python -m src.scripts.populate_game_tables --games 1022400001 --override
+```
+
+#### Development/Testing
+```bash
+# Test with limited games
+python -m src.scripts.populate_game_tables --all --limit 10 --dry-run
+python -m src.scripts.populate_game_tables --seasons 2024 --limit 5
+
+# Resume large population job
+python -m src.scripts.populate_game_tables --all --resume-from 1022400500 --validate
+
+# Test with override flag to fix data quality issues
+python -m src.scripts.populate_game_tables --seasons 2024 --limit 5 --override
+```
+
+### Database Tables Populated
+
+The script populates these 8 normalized tables:
+
+1. **Arena** - Venue information
+2. **Team** - WNBA team details
+3. **Person** - Players and officials
+4. **Game** - Game metadata and results
+5. **TeamGame** - Team-game relationships
+6. **PersonGame** - Person-game relationships
+7. **Play** - Play-by-play data
+8. **Boxscore** - Player and team statistics
+
+### Features
+
+- **Transaction Management**: Each game processed in its own transaction
+- **Error Recovery**: Failed games don't stop processing of remaining games
+- **Progress Tracking**: Real-time updates every 10 games
+- **Resume Capability**: Resume large jobs from specific game ID
+- **Override Mode**: Clear and repopulate games when data issues occur
+- **Foreign Key Validation**: Built-in integrity checking
+- **Conflict Resolution**: Handles duplicate data gracefully
+- **Comprehensive Logging**: Detailed logs with statistics
+
+#### When to Use --override Flag
+
+Use the `--override` flag in these scenarios:
+- **Data Quality Issues**: Fix problems like invalid person IDs or team data
+- **Extractor Updates**: Repopulate with improved JSON extraction logic
+- **Schema Changes**: Update data after model or processing changes
+- **Corruption Recovery**: Clean up games with inconsistent data
+
+⚠️ **Warning**: Override clears ALL existing data for specified games before repopulation
+
+### Output
+
+The script provides detailed statistics after each run:
+
+```
+Population Results:
+  Total games: 240
+  Successful: 235 
+  Failed: 5
+  Duration: 0:15:30
+
+Records inserted by table:
+  arenas: 15
+  teams: 12
+  persons: 1,247
+  games: 235
+  team_games: 470
+  person_games: 12,450
+  plays: 89,670
+  boxscores: 3,340
+```
+
+## Data Validation
+
+The `validate_populated_data.py` script performs comprehensive validation of populated game table data, checking for data integrity, foreign key violations, and data quality issues.
+
+### Prerequisites
+
+Ensure you have populated game tables:
+
+```bash
+source venv/bin/activate
+# First populate some tables (see Game Table Population section above)
+```
+
+### Basic Usage
+
+```bash
+python -m src.scripts.validate_populated_data [OPTIONS]
+```
+
+### Command Options
+
+| Option | Description | Example |
+|--------|-------------|---------|
+| `--output FILE, -o FILE` | Output validation report to file | `--output validation_report.txt` |
+| `--json` | Output results as JSON format | `--json` |
+
+### Examples
+
+#### Basic Validation
+```bash
+# Run complete validation (console output)
+python -m src.scripts.validate_populated_data
+
+# Save validation report to file
+python -m src.scripts.validate_populated_data --output validation_report.txt
+
+# Save results as JSON
+python -m src.scripts.validate_populated_data --output results.json --json
+```
+
+### Validation Checks
+
+#### Foreign Key Integrity
+- **Game → Arena**: Games referencing valid arenas
+- **TeamGame → Game/Team**: Team-game relationships integrity
+- **PersonGame → Game/Person**: Person-game relationships integrity
+- **Play → Game/Person/Team**: Play-by-play data integrity
+- **Boxscore → Game/Person/Team**: Boxscore data integrity
+
+#### Data Quality Checks
+- **Missing Required Data**: Games without arena/team information
+- **Invalid Values**: Negative statistics, invalid percentages
+- **Data Consistency**: Home/away team indicators, box types
+- **Completeness**: Persons without names, plays without action types
+
+#### Statistical Analysis
+- **Game Statistics**: Total games, unique arenas/teams, date ranges
+- **Play Statistics**: Total plays, unique action types, average points
+- **Boxscore Statistics**: Player averages, maximum values
+- **Person Statistics**: Name coverage, total persons
+
+### Features
+
+- **Comprehensive Checks**: Foreign keys, data quality, statistics
+- **Detailed Reporting**: Clear categorization of issues by severity
+- **Export Options**: Text reports or JSON for integration
+- **Error Classification**: Errors vs warnings for prioritization
+- **Performance Optimized**: Efficient SQL queries for large datasets
+
+### Output
+
+The validator provides detailed results:
+
+```
+DATA VALIDATION SUMMARY
+============================================
+
+Table Record Counts:
+  arena: 15
+  team: 12
+  person: 1,247
+  game: 235
+  team_game: 470
+  person_game: 12,450
+  play: 89,670
+  boxscore: 3,340
+
+✓ No foreign key violations found
+✓ No data quality issues found
+
+Statistical Summary:
+  Total games: 235
+  Total plays: 89,670
+  Total boxscore entries: 3,340
+
+🎉 VALIDATION PASSED - All checks successful!
+```
+
+### Integration
+
+Both scripts integrate with:
+- `population_services`: Core population logic
+- `database.models`: SQLAlchemy ORM models
+- `database.database`: Database connection management
+- `json_extractors`: Data transformation utilities
+
+## Unified WNBA Data Manager (NEW)
+
+The `wnba_data_manager.py` script provides a unified CLI interface that combines scraping and population operations into single workflows. This eliminates the need to run separate scraping and population commands.
+
+### Prerequisites
+
+```bash
+source venv/bin/activate
+python -m src.database.database  # Setup database and run migrations
+```
+
+### Basic Usage
+
+```bash
+python -m src.scripts.wnba_data_manager COMMAND [OPTIONS]
+```
+
+### Available Commands
+
+#### Combined Operations (Scrape + Populate)
+
+```bash
+# Scrape specific games and immediately populate them
+python -m src.scripts.wnba_data_manager scrape-populate-games --game-ids 1022400001 1022400002
+
+# Scrape entire season and populate (recommended workflow)
+python -m src.scripts.wnba_data_manager scrape-populate-season --season 2024
+
+# Test with limited games
+python -m src.scripts.wnba_data_manager scrape-populate-season --season 2024 --max-games 10
+```
+
+#### Data Verification and Updates
+
+```bash
+# Re-scrape games to check for changes, update if different, then re-populate
+python -m src.scripts.wnba_data_manager verify-repopulate --game-ids 1022400001 1022400002
+
+# Verify and repopulate entire season
+python -m src.scripts.wnba_data_manager verify-repopulate-season --season 2024
+
+# Verify season with game type and limits
+python -m src.scripts.wnba_data_manager verify-repopulate-season --season 2024 --game-type playoff --max-games 20
+
+# Complete refresh: re-scrape, clear existing data, and re-populate
+python -m src.scripts.wnba_data_manager full-refresh --game-ids 1022400001
+```
+
+#### Individual Operations
+
+```bash
+# Only scraping (delegates to scraper_manager)
+python -m src.scripts.wnba_data_manager scrape-only --season 2024
+python -m src.scripts.wnba_data_manager scrape-only --game-ids 1022400001 1022400002
+
+# Only population (delegates to populate_game_tables)
+python -m src.scripts.wnba_data_manager populate-only --season 2024
+python -m src.scripts.wnba_data_manager populate-only --game-ids 1022400001 1022400002
+```
+
+### Command Options
+
+| Option | Description | Example |
+|--------|-------------|---------|
+| `--season YEAR` | WNBA season year | `--season 2024` |
+| `--game-type TYPE` | Game type: `regular` or `playoff` (default: regular) | `--game-type playoff` |
+| `--game-ids ID [ID...]` | Specific game IDs to process | `--game-ids 1022400001 1022400002` |
+| `--max-games N` | Maximum number of games to process | `--max-games 10` |
+| `--override` | Override existing data | `--override` |
+| `--clear-tables` | Clear all populated tables before processing | `--clear-tables` |
+| `--validate` | Validate foreign key integrity after population | `--validate` |
+| `--verbose, -v` | Enable verbose logging | `--verbose` |
+| `--dry-run` | Show what would be processed without actual processing | `--dry-run` |
+
+### Workflow Examples
+
+#### Production Workflows
+
+```bash
+# Process complete season from scratch
+python -m src.scripts.wnba_data_manager scrape-populate-season --season 2024 --validate
+
+# Update specific games with fresh data
+python -m src.scripts.wnba_data_manager verify-repopulate --game-ids 1022400001 1022400002
+
+# Verify and update entire season
+python -m src.scripts.wnba_data_manager verify-repopulate-season --season 2024 --validate
+
+# Start fresh with clean tables
+python -m src.scripts.wnba_data_manager scrape-populate-season --season 2024 --clear-tables --validate
+```
+
+#### Development/Testing
+
+```bash
+# Test with limited games and dry run
+python -m src.scripts.wnba_data_manager scrape-populate-games --game-ids 1022400001 --dry-run
+
+# Process small dataset for testing
+python -m src.scripts.wnba_data_manager scrape-populate-season --season 2024 --max-games 5 --verbose
+
+# Full refresh for troubleshooting
+python -m src.scripts.wnba_data_manager full-refresh --game-ids 1022400001 --verbose
+```
+
+#### Data Quality Workflows
+
+```bash
+# Check for updated game data and fix any issues (specific games)
+python -m src.scripts.wnba_data_manager verify-repopulate --game-ids 1022400001 1022400002
+
+# Check for updated game data across entire season
+python -m src.scripts.wnba_data_manager verify-repopulate-season --season 2024
+
+# Complete data refresh when major issues detected
+python -m src.scripts.wnba_data_manager full-refresh --game-ids 1022400001
+
+# Re-populate only (when raw data is good but populated data needs updating)
+python -m src.scripts.wnba_data_manager populate-only --game-ids 1022400001 --override
+```
+
+### Output
+
+The unified manager provides comprehensive statistics for both phases:
+
+```bash
+Scrape-and-Populate Results:
+  SCRAPING:
+    Total: 5
+    Success: 5
+    Failed: 0
+    Skipped: 0
+  POPULATION:
+    Total: 5
+    Success: 5
+    Failed: 0
+
+✓ Foreign key validation passed!
+```
+
+### Key Benefits
+
+- **Simplified Workflow**: Single command for complete data pipeline
+- **Atomic Operations**: Each game processed completely or not at all
+- **Intelligent Updates**: Only update games when source data actually changes
+- **Data Quality**: Built-in validation and integrity checking
+- **Error Recovery**: Failed games don't affect successful ones
+- **Progress Tracking**: Real-time status for both scraping and population phases
+
+### Integration
+
+The unified manager coordinates:
+- `scraper_manager`: For all scraping operations
+- `populate_game_tables`: For all population operations  
+- Combined logging and session tracking
+- Unified error handling and statistics
+
+### When to Use Each Command
+
+- **`scrape-populate-*`**: New data processing workflows
+- **`verify-repopulate`**: Regular data quality checks and updates for specific games
+- **`verify-repopulate-season`**: Regular data quality checks and updates for entire seasons
+- **`full-refresh`**: When data corruption or major issues detected
+- **Individual operations**: When you need only scraping or population
+
+## 🎮 **Game ID Format Reference**
+
+WNBA game IDs follow this pattern: `10SYY00GGG`
+
+| Position | Digits | Description | Values |
+|----------|--------|-------------|---------|
+| 1-2      | `10`   | League identifier | Always `10` |
+| 3        | `S`    | Season type | `2` = Regular season, `4` = Playoff |
+| 4-5      | `YY`   | Year (last 2 digits) | `97`=1997, `24`=2024, etc. |
+| 6-7      | `00`   | Fixed padding | Always `00` |
+| 8-10     | `GGG`  | Game number | `001`, `150`, etc. |
+
+**Examples:**
+- `1022400001` = 2024 regular season game 1
+- `1042400001` = 2024 playoff game 1 
+- `1022300150` = 2023 regular season game 150
+- `1029700001` = 1997 regular season game 1 (inaugural season)
+
+**How to Find Game IDs:**
+- Check existing data: `python -m src.database.database_stats --local`
+- Generate from CSV files: See `src/scrapers/wnba-games-*.csv`
+- Pattern matching: Regular season games typically range 001-200+ per season
