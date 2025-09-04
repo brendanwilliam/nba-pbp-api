@@ -269,11 +269,12 @@ class GameTablePopulator:
     def clear_all_tables(self) -> bool:
         """
         Clear all populated tables and reset sequences (hard reset).
+        Uses TRUNCATE for speed - clears millions of rows in seconds instead of minutes.
         
         Returns:
             True if successful
         """
-        logger.info("Starting hard reset - clearing all populated tables...")
+        logger.info("🚀 Starting FAST hard reset using TRUNCATE...")
         
         # Define tables in dependency order (children first, parents last)
         tables_to_clear = [
@@ -287,36 +288,34 @@ class GameTablePopulator:
             'arena'
         ]
         
-        with self.Session() as session:
+        with self.engine.begin() as conn:
             try:
-                # Clear tables in dependency order
+                logger.info("⚡ Using TRUNCATE for ultra-fast clearing (seconds vs minutes)...")
+                
+                # Temporarily disable foreign key constraints for speed
+                logger.info("Temporarily disabling foreign key constraints...")
+                conn.execute(text("SET session_replication_role = replica;"))
+                
+                # TRUNCATE tables with CASCADE (much faster than DELETE)
                 for table_name in tables_to_clear:
-                    logger.info(f"Clearing table: {table_name}")
-                    session.execute(text(f"DELETE FROM {table_name}"))
+                    logger.info(f"🗑️  TRUNCATING {table_name}...")
+                    conn.execute(text(f"TRUNCATE TABLE {table_name} RESTART IDENTITY CASCADE;"))
+                    logger.info(f"✅ {table_name} cleared instantly")
                 
-                # Reset sequences for tables with auto-incrementing IDs
-                sequences_to_reset = [
-                    ('arena', 'arena_arena_id_seq'),
-                    ('team', 'team_id_seq'), 
-                    ('person', 'person_person_id_seq'),
-                    ('game', 'game_game_id_seq'),
-                    ('team_game', 'team_game_team_game_id_seq'),
-                    ('person_game', 'person_game_person_game_id_seq'),
-                    ('play', 'play_play_id_seq'),
-                    ('boxscore', 'boxscore_boxscore_id_seq')
-                ]
+                # Re-enable foreign key constraints
+                logger.info("Re-enabling foreign key constraints...")
+                conn.execute(text("SET session_replication_role = DEFAULT;"))
                 
-                for table_name, seq_name in sequences_to_reset:
-                    logger.info(f"Resetting sequence: {seq_name}")
-                    session.execute(text(f"ALTER SEQUENCE {seq_name} RESTART WITH 1"))
-                
-                session.commit()
-                logger.info("✅ All tables cleared and sequences reset successfully")
+                logger.info("🎉 All tables cleared and sequences reset successfully in seconds!")
                 return True
                 
             except Exception as e:
-                logger.error(f"Error during table clearing: {e}")
-                session.rollback()
+                logger.error(f"❌ Error during fast table clearing: {e}")
+                # Ensure foreign keys are re-enabled even on error
+                try:
+                    conn.execute(text("SET session_replication_role = DEFAULT;"))
+                except:
+                    pass  # Don't fail if connection is already closed
                 raise
     
     def validate_foreign_keys(self) -> bool:
@@ -410,7 +409,7 @@ def main():
         help='Process all games in raw_game_data table'
     )
     mode_group.add_argument(
-        '--games', type=int, nargs='+',
+        '--game-ids', type=int, nargs='+',
         help='Process specific game IDs'
     )
     mode_group.add_argument(
@@ -470,8 +469,8 @@ def main():
                 resume_from_game_id=args.resume_from,
                 override_existing=args.override
             )
-        elif args.games:
-            stats = populator.populate_specific_games(args.games, override_existing=args.override)
+        elif args.game_ids:
+            stats = populator.populate_specific_games(args.game_ids, override_existing=args.override)
         elif args.seasons:
             stats = populator.populate_games_by_season(
                 args.seasons,

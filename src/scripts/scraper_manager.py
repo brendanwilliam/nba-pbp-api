@@ -84,14 +84,16 @@ class ScraperManager:
         logger.info(f"Generated {len(game_urls)} URLs for {season} {game_type} season")
         return game_urls
     
-    def scrape_single_game(self, game_url_info: GameURLInfo) -> bool:
+    def scrape_single_game(self, game_url_info: GameURLInfo, override_existing: bool = False) -> bool:
         """Scrape a single game and save to database."""
         try:
-            # Check if game already exists
+            # Check if game already exists (unless overriding)
             with DatabaseService() as db:
-                if db.game_data.game_exists(int(game_url_info.game_id)):
+                if not override_existing and db.game_data.game_exists(int(game_url_info.game_id)):
                     logger.info(f"Game {game_url_info.game_id} already exists, skipping")
                     return True
+                elif override_existing and db.game_data.game_exists(int(game_url_info.game_id)):
+                    logger.info(f"Game {game_url_info.game_id} already exists, but override_existing=True - will re-scrape")
             
             # Extract game data
             result, game_data, metadata = self.data_extractor.extract_game_data(game_url_info.game_url)
@@ -100,8 +102,13 @@ class ScraperManager:
                 logger.warning(f"Failed to extract data for game {game_url_info.game_id}: {result}")
                 return False
             
-            # Save to database
+            # Save to database (with override handling)
             with DatabaseService() as db:
+                if override_existing and db.game_data.game_exists(int(game_url_info.game_id)):
+                    # Delete existing data first
+                    logger.info(f"Deleting existing data for game {game_url_info.game_id}")
+                    db.game_data.delete_game_data(int(game_url_info.game_id))
+                
                 success = db.game_data.insert_game_data(
                     game_id=int(game_url_info.game_id),
                     season=int(game_url_info.season),
@@ -111,7 +118,8 @@ class ScraperManager:
                 )
                 
                 if success:
-                    logger.info(f"Successfully scraped game {game_url_info.game_id}")
+                    action = "re-scraped" if override_existing else "scraped"
+                    logger.info(f"Successfully {action} game {game_url_info.game_id}")
                     return True
                 else:
                     logger.error(f"Failed to save game {game_url_info.game_id} to database")
@@ -120,6 +128,273 @@ class ScraperManager:
         except Exception as e:
             logger.error(f"Error scraping game {game_url_info.game_id}: {e}")
             return False
+    
+    def compare_and_update_game(self, game_url_info: GameURLInfo) -> Dict[str, Any]:
+        """
+        Re-scrape a game and compare it to existing data. Update if different.
+        
+        Returns:
+            Dict with comparison results and action taken
+        """
+        try:
+            # Check if game exists
+            with DatabaseService() as db:
+                if not db.game_data.game_exists(int(game_url_info.game_id)):
+                    logger.warning(f"Game {game_url_info.game_id} does not exist in database")
+                    return {
+                        'game_id': game_url_info.game_id,
+                        'status': 'not_found',
+                        'action': 'none',
+                        'changes_detected': False
+                    }
+                
+                # Get existing game data
+                existing_game = db.game_data.get_game_data(int(game_url_info.game_id))
+                if not existing_game:
+                    logger.error(f"Could not retrieve existing data for game {game_url_info.game_id}")
+                    return {
+                        'game_id': game_url_info.game_id,
+                        'status': 'error',
+                        'action': 'none',
+                        'changes_detected': False
+                    }
+                
+                existing_data = existing_game.game_data
+            
+            # Extract fresh game data
+            result, fresh_data, metadata = self.data_extractor.extract_game_data(game_url_info.game_url)
+            
+            if result != ExtractionResult.SUCCESS or not fresh_data:
+                logger.warning(f"Failed to extract fresh data for game {game_url_info.game_id}: {result}")
+                return {
+                    'game_id': game_url_info.game_id,
+                    'status': 'extraction_failed',
+                    'action': 'none',
+                    'changes_detected': False
+                }
+            
+            # Compare data (deep comparison)
+            import json
+            existing_json = json.dumps(existing_data, sort_keys=True)
+            fresh_json = json.dumps(fresh_data, sort_keys=True)
+            
+            if existing_json == fresh_json:
+                logger.info(f"Game {game_url_info.game_id} data is identical - no update needed")
+                return {
+                    'game_id': game_url_info.game_id,
+                    'status': 'identical',
+                    'action': 'none',
+                    'changes_detected': False
+                }
+            else:
+                # Data is different - update the database
+                logger.info(f"Game {game_url_info.game_id} has changed data - updating database")
+                
+                with DatabaseService() as db:
+                    # Delete existing and insert fresh data
+                    db.game_data.delete_game_data(int(game_url_info.game_id))
+                    
+                    success = db.game_data.insert_game_data(
+                        game_id=int(game_url_info.game_id),
+                        season=int(game_url_info.season),
+                        game_type=game_url_info.game_type,
+                        game_url=game_url_info.game_url,
+                        game_data=fresh_data
+                    )
+                    
+                    if success:
+                        logger.info(f"Successfully updated game {game_url_info.game_id} with fresh data")
+                        return {
+                            'game_id': game_url_info.game_id,
+                            'status': 'updated',
+                            'action': 'updated',
+                            'changes_detected': True
+                        }
+                    else:
+                        logger.error(f"Failed to update game {game_url_info.game_id}")
+                        return {
+                            'game_id': game_url_info.game_id,
+                            'status': 'update_failed',
+                            'action': 'none',
+                            'changes_detected': True
+                        }
+        
+        except Exception as e:
+            logger.error(f"Error comparing/updating game {game_url_info.game_id}: {e}")
+            return {
+                'game_id': game_url_info.game_id,
+                'status': 'error',
+                'action': 'none',
+                'changes_detected': False,
+                'error': str(e)
+            }
+    
+    def verify_and_update_games(self, game_ids: List[str]) -> Dict[str, Any]:
+        """
+        Verify and update multiple games by comparing fresh scrapes to existing data.
+        
+        Args:
+            game_ids: List of game IDs to verify and update
+            
+        Returns:
+            Dict with verification statistics
+        """
+        session_name = f"verify_update_{len(game_ids)}games_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        session_id = self.start_scraping_session(session_name)
+        
+        if not session_id:
+            logger.error("Failed to start verification session")
+            return {
+                'total': 0,
+                'identical': 0,
+                'updated': 0,
+                'failed': 0,
+                'not_found': 0,
+                'results': []
+            }
+        
+        # Statistics
+        stats = {
+            'total': len(game_ids),
+            'identical': 0,
+            'updated': 0,
+            'failed': 0,
+            'not_found': 0,
+            'results': []
+        }
+        
+        logger.info(f"Starting verification and update of {stats['total']} games")
+        
+        for i, game_id in enumerate(game_ids, 1):
+            logger.info(f"Verifying game {i}/{stats['total']}: {game_id}")
+            
+            try:
+                # Determine season and create game URL info
+                season = self._determine_season_from_game_id(game_id)
+                game_url = self.url_generator.generate_game_url(game_id)
+                
+                game_url_info = GameURLInfo(
+                    game_id=game_id,
+                    season=str(season),
+                    game_url=game_url,
+                    game_type='regular'  # Assume regular for now
+                )
+                
+                # Compare and update if needed
+                result = self.compare_and_update_game(game_url_info)
+                stats['results'].append(result)
+                
+                # Update counters
+                if result['status'] == 'identical':
+                    stats['identical'] += 1
+                elif result['status'] == 'updated':
+                    stats['updated'] += 1
+                elif result['status'] == 'not_found':
+                    stats['not_found'] += 1
+                else:
+                    stats['failed'] += 1
+                
+                # Update session progress every 5 games
+                if i % 5 == 0:
+                    self.update_session_progress(stats['updated'], stats['failed'])
+                
+                # Small delay to be respectful
+                time.sleep(1)
+                
+            except Exception as e:
+                logger.error(f"Error verifying game {game_id}: {e}")
+                stats['failed'] += 1
+                stats['results'].append({
+                    'game_id': game_id,
+                    'status': 'error',
+                    'action': 'none',
+                    'changes_detected': False,
+                    'error': str(e)
+                })
+        
+        # Final session update
+        self.update_session_progress(stats['updated'], stats['failed'])
+        
+        # Complete session
+        session_status = 'completed' if stats['failed'] == 0 else 'completed_with_errors'
+        self.complete_session(session_status)
+        
+        logger.info(f"Verification completed. Identical: {stats['identical']}, "
+                   f"Updated: {stats['updated']}, Failed: {stats['failed']}, "
+                   f"Not Found: {stats['not_found']}")
+        
+        return stats
+    
+    def verify_and_update_season(self, season: int, game_type: str = 'regular', 
+                                max_games: Optional[int] = None) -> Dict[str, Any]:
+        """
+        Verify and update all games in a season by comparing fresh scrapes to existing data.
+        
+        Args:
+            season: WNBA season year
+            game_type: 'regular' or 'playoff'
+            max_games: Maximum number of games to process
+            
+        Returns:
+            Dict with verification statistics
+        """
+        session_name = f"verify_season_{season}_{game_type}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        session_id = self.start_scraping_session(session_name)
+        
+        if not session_id:
+            logger.error("Failed to start season verification session")
+            return {
+                'total': 0,
+                'identical': 0,
+                'updated': 0,
+                'failed': 0,
+                'not_found': 0,
+                'results': []
+            }
+        
+        # Get all game IDs for this season from the database
+        with DatabaseService() as db:
+            # Query games by season from raw_game_data
+            from ..database.models import RawGameData
+            
+            session = db.get_session()
+            query = session.query(RawGameData).filter(
+                RawGameData.season == season
+            )
+            
+            # Filter by game_type if we can determine it from the data
+            # For now, we'll process all games in the season
+            if max_games:
+                query = query.limit(max_games)
+            
+            games = query.all()
+            game_ids = [str(game.game_id) for game in games]
+        
+        if not game_ids:
+            logger.warning(f"No games found for season {season}")
+            return {
+                'total': 0,
+                'identical': 0,
+                'updated': 0,
+                'failed': 0,
+                'not_found': 0,
+                'results': []
+            }
+        
+        logger.info(f"Starting verification and update of {len(game_ids)} games from {season} {game_type} season")
+        
+        # Use the existing verify_and_update_games method
+        stats = self.verify_and_update_games(game_ids)
+        
+        # Update session name to reflect actual processing
+        stats['season'] = season
+        stats['game_type'] = game_type
+        
+        logger.info(f"Season verification completed for {season} {game_type}. "
+                   f"Identical: {stats['identical']}, Updated: {stats['updated']}, "
+                   f"Failed: {stats['failed']}")
+        
+        return stats
     
     def scrape_season(self, season: int, game_type: str = 'regular', max_games: Optional[int] = None) -> Dict[str, int]:
         """
@@ -162,7 +437,7 @@ class ScraperManager:
                     logger.info(f"Game {game_url_info.game_id} already exists, skipping")
                     continue
             
-            success = self.scrape_single_game(game_url_info)
+            success = self.scrape_single_game(game_url_info, override_existing=False)
             
             if success:
                 stats['success'] += 1
@@ -185,6 +460,101 @@ class ScraperManager:
         
         logger.info(f"Scraping completed. Success: {stats['success']}, Failed: {stats['failed']}, Skipped: {stats['skipped']}")
         return stats
+    
+    def scrape_specific_games(self, game_ids: List[str], override_existing: bool = False) -> Dict[str, int]:
+        """
+        Scrape specific games by ID.
+        
+        Args:
+            game_ids: List of game IDs to scrape
+            override_existing: If True, re-scrape games that already exist
+            
+        Returns:
+            Dict with scraping statistics
+        """
+        session_name = f"specific_games_scraping_{len(game_ids)}games_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        session_id = self.start_scraping_session(session_name)
+        
+        if not session_id:
+            logger.error("Failed to start scraping session")
+            return {'total': 0, 'success': 0, 'failed': 0, 'skipped': 0}
+        
+        # Determine seasons for each game ID
+        game_url_infos = []
+        for game_id in game_ids:
+            try:
+                # Extract season from game ID format (1SYYTTGGG where SYY is season)
+                season = self._determine_season_from_game_id(game_id)
+                game_url = self.url_generator.generate_game_url(game_id)
+                
+                game_url_info = GameURLInfo(
+                    game_id=game_id,
+                    season=str(season),
+                    game_url=game_url,
+                    game_type='regular'  # Assume regular for now
+                )
+                game_url_infos.append(game_url_info)
+                
+            except Exception as e:
+                logger.error(f"Failed to create URL info for game {game_id}: {e}")
+                continue
+        
+        # Scraping statistics
+        stats = {'total': len(game_url_infos), 'success': 0, 'failed': 0, 'skipped': 0}
+        
+        logger.info(f"Starting to scrape {stats['total']} specific games (override_existing={override_existing})")
+        
+        for i, game_url_info in enumerate(game_url_infos, 1):
+            logger.info(f"Scraping game {i}/{stats['total']}: {game_url_info.game_id}")
+            
+            # Check if already exists (unless overriding)
+            if not override_existing:
+                with DatabaseService() as db:
+                    if db.game_data.game_exists(int(game_url_info.game_id)):
+                        stats['skipped'] += 1
+                        logger.info(f"Game {game_url_info.game_id} already exists, skipping")
+                        continue
+            
+            success = self.scrape_single_game(game_url_info, override_existing=override_existing)
+            
+            if success:
+                stats['success'] += 1
+            else:
+                stats['failed'] += 1
+            
+            # Update session progress every 5 games
+            if i % 5 == 0:
+                self.update_session_progress(stats['success'], stats['failed'])
+            
+            # Small delay to be respectful to the server
+            time.sleep(2)  # Slightly longer for specific scraping
+        
+        # Final session update
+        self.update_session_progress(stats['success'], stats['failed'])
+        
+        # Complete session
+        session_status = 'completed' if stats['failed'] == 0 else 'completed_with_errors'
+        self.complete_session(session_status)
+        
+        logger.info(f"Specific game scraping completed. Success: {stats['success']}, Failed: {stats['failed']}, Skipped: {stats['skipped']}")
+        return stats
+    
+    def _determine_season_from_game_id(self, game_id: str) -> int:
+        """Determine the season from game ID format."""
+        # WNBA game IDs follow format: 1SYYTTGGG where SYY is season (e.g., 024 = 2024)
+        if len(game_id) >= 5:
+            season_part = game_id[1:4]  # Extract SYY part
+            if season_part.startswith('0'):
+                # Format: 024 -> 2024, 023 -> 2023, etc.
+                year_suffix = int(season_part[1:])
+                if year_suffix >= 97:  # 1997
+                    return 1900 + year_suffix
+                else:  # 2000+
+                    return 2000 + year_suffix
+        
+        # Fallback - assume recent season
+        logger.warning(f"Could not determine season from game_id {game_id}, assuming 2024")
+        return 2024
     
     def scrape_all_seasons(self, game_type: str = 'regular', max_games_total: Optional[int] = None) -> Dict[str, Any]:
         """
@@ -265,7 +635,7 @@ class ScraperManager:
                             logger.info(f"Game {game_url_info.game_id} already exists, skipping")
                             continue
                     
-                    success = self.scrape_single_game(game_url_info)
+                    success = self.scrape_single_game(game_url_info, override_existing=False)
                     
                     if success:
                         season_stats['success'] += 1
@@ -405,7 +775,7 @@ def main():
     """Main CLI interface for the scraper manager."""
     parser = argparse.ArgumentParser(description='WNBA Game Data Scraper Manager')
     
-    parser.add_argument('command', choices=['scrape-season', 'scrape-all-regular', 'scrape-all-playoff', 'scrape-all-games', 'test-single', 'list-sessions'],
+    parser.add_argument('command', choices=['scrape-season', 'scrape-all-regular', 'scrape-all-playoff', 'scrape-all-games', 'scrape-games', 'test-single', 'verify-games', 'verify-season', 'list-sessions'],
                        help='Command to execute')
     
     parser.add_argument('--season', type=int, required=False,
@@ -418,7 +788,13 @@ def main():
                        help='Maximum number of games to scrape (for testing)')
     
     parser.add_argument('--game-id', type=str, default=None,
-                       help='Specific game ID to scrape (for test-single command)')
+                       help='Single game ID to scrape (for test-single command)')
+    
+    parser.add_argument('--game-ids', type=str, nargs='+', default=None,
+                       help='Multiple game IDs to scrape (for scrape-games command)')
+    
+    parser.add_argument('--override', action='store_true',
+                       help='Override existing games - re-scrape games that already exist')
     
     parser.add_argument('--verbose', '-v', action='store_true',
                        help='Enable verbose logging')
@@ -462,7 +838,7 @@ def main():
             session_name = f"test_single_{args.game_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
             manager.start_scraping_session(session_name)
             
-            success = manager.scrape_single_game(game_url_info)
+            success = manager.scrape_single_game(game_url_info, override_existing=args.override)
             
             if success:
                 print(f"Successfully scraped game {args.game_id}")
@@ -470,6 +846,22 @@ def main():
             else:
                 print(f"Failed to scrape game {args.game_id}")
                 manager.complete_session('failed')
+                
+        elif args.command == 'scrape-games':
+            if not args.game_ids:
+                logger.error("--game-ids is required for scrape-games command")
+                sys.exit(1)
+            
+            stats = manager.scrape_specific_games(args.game_ids, override_existing=args.override)
+            
+            print(f"\nSpecific Games Scraping Results:")
+            print(f"  Total games: {stats['total']}")
+            print(f"  Successfully scraped: {stats['success']}")
+            print(f"  Failed: {stats['failed']}")
+            print(f"  Skipped (already exist): {stats['skipped']}")
+            
+            if args.override:
+                print(f"  Override mode: {'ON' if args.override else 'OFF'}")
                 
         elif args.command == 'scrape-all-regular':
             stats = manager.scrape_all_seasons('regular', args.max_games)
@@ -531,6 +923,60 @@ def main():
             print(f"  Seasons: {playoff['seasons_processed']}")
             print(f"  Games: {playoff['total_games']} (Success: {playoff['total_success']}, Failed: {playoff['total_failed']}, Skipped: {playoff['total_skipped']})")
             
+        elif args.command == 'verify-games':
+            if not args.game_ids:
+                logger.error("--game-ids is required for verify-games command")
+                sys.exit(1)
+            
+            stats = manager.verify_and_update_games(args.game_ids)
+            
+            print(f"\nGame Verification Results:")
+            print(f"  Total games: {stats['total']}")
+            print(f"  Identical (no update needed): {stats['identical']}")
+            print(f"  Updated: {stats['updated']}")
+            print(f"  Failed: {stats['failed']}")
+            print(f"  Not found: {stats['not_found']}")
+            
+            if stats['updated'] > 0:
+                print(f"\nGames that were updated:")
+                for result in stats['results']:
+                    if result['status'] == 'updated':
+                        print(f"  - Game {result['game_id']}: Updated with fresh data")
+            
+            if stats['failed'] > 0:
+                print(f"\nFailed games:")
+                for result in stats['results']:
+                    if result['status'] in ['error', 'extraction_failed', 'update_failed']:
+                        error_msg = result.get('error', result['status'])
+                        print(f"  - Game {result['game_id']}: {error_msg}")
+        
+        elif args.command == 'verify-season':
+            if not args.season:
+                logger.error("--season is required for verify-season command")
+                sys.exit(1)
+            
+            stats = manager.verify_and_update_season(args.season, args.game_type, args.max_games)
+            
+            print(f"\nSeason Verification Results ({args.season} {args.game_type}):")
+            print(f"  Total games: {stats['total']}")
+            print(f"  Identical (no update needed): {stats['identical']}")
+            print(f"  Updated: {stats['updated']}")
+            print(f"  Failed: {stats['failed']}")
+            print(f"  Not found: {stats['not_found']}")
+            
+            if stats['updated'] > 0:
+                print(f"\nGames that were updated:")
+                for result in stats['results']:
+                    if result['status'] == 'updated':
+                        print(f"  - Game {result['game_id']}: Updated with fresh data")
+            
+            if stats['failed'] > 0:
+                print(f"\nFailed games:")
+                for result in stats['results']:
+                    if result['status'] in ['error', 'extraction_failed', 'update_failed']:
+                        error_msg = result.get('error', result['status'])
+                        print(f"  - Game {result['game_id']}: {error_msg}")
+        
         elif args.command == 'list-sessions':
             manager.list_active_sessions()
             

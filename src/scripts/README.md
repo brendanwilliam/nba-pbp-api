@@ -57,6 +57,22 @@ python -m src.scripts.scraper_manager scrape-all-games --max-games 100 --verbose
 python -m src.scripts.scraper_manager test-single --game-id 1022400001 --season 2024
 ```
 
+#### Game Verification and Updates
+```bash
+# Verify and update specific games (re-scrape and compare to existing data)
+python -m src.scripts.scraper_manager verify-games --game-ids 1022400001 1022400002
+
+# Verify and update entire season
+python -m src.scripts.scraper_manager verify-season --season 2024 --game-type regular
+
+# Use with verbose logging to see comparison details
+python -m src.scripts.scraper_manager verify-games --game-ids 1022400001 --verbose
+python -m src.scripts.scraper_manager verify-season --season 2024 --verbose
+
+# Limit verification to subset of games for testing
+python -m src.scripts.scraper_manager verify-season --season 2024 --max-games 10
+```
+
 #### Session Management
 ```bash
 # List all active scraping sessions
@@ -71,6 +87,8 @@ python -m src.scripts.scraper_manager list-sessions
 | `--game-type TYPE` | Game type: `regular` or `playoff` (default: regular) | `--game-type playoff` |
 | `--max-games N` | Limit scraping to N games per season OR total games for bulk commands | `--max-games 5` |
 | `--game-id ID` | Specific game ID (for test-single) | `--game-id 1022400001` |
+| `--game-ids ID [ID...]` | Multiple game IDs (for scrape-games, verify-games) | `--game-ids 1022400001 1022400002` |
+| `--override` | Override existing games - re-scrape games that already exist | `--override` |
 | `--verbose, -v` | Enable verbose logging | `--verbose` |
 
 ### Examples
@@ -105,6 +123,8 @@ python -m src.scripts.scraper_manager test-single --game-id 1022400001 --season 
 - **Session Tracking**: All scraping operations are tracked in the `scraping_sessions` database table
 - **Progress Monitoring**: Real-time progress updates every 10 games
 - **Duplicate Detection**: Automatically skips games that already exist in the database
+- **Game Verification**: Re-scrape and compare games to detect data changes
+- **Data Updates**: Automatically update games when source data changes
 - **Error Handling**: Robust error handling with detailed logging
 - **Rate Limiting**: Built-in delays to be respectful to the WNBA website
 - **Logging**: Comprehensive logging to both console and `scraper_manager.log` file
@@ -402,43 +422,167 @@ Both scripts integrate with:
 - `database.database`: Database connection management
 - `json_extractors`: Data transformation utilities
 
-## Temporal Tracking Backfill Scripts
+## Unified WNBA Data Manager (NEW)
 
-The project includes temporal tracking scripts for maintaining `first_used` and `last_used` timestamps on Arena, Team, and Person entities.
+The `wnba_data_manager.py` script provides a unified CLI interface that combines scraping and population operations into single workflows. This eliminates the need to run separate scraping and population commands.
 
-### First Used Backfill
-
-```bash
-# Backfill first_used timestamps for entities with NULL values
-python -m src.scripts.backfill_first_used
-
-# Preview changes without modifying database
-python -m src.scripts.backfill_first_used --dry-run
-
-# Enable verbose logging
-python -m src.scripts.backfill_first_used --verbose
-```
-
-**Purpose**: Sets `first_used` timestamps for entities that were created before temporal tracking was implemented. Only processes entities with NULL `first_used` values.
-
-### Last Used Backfill
+### Prerequisites
 
 ```bash
-# Update all last_used timestamps to ensure accuracy
-python -m src.scripts.backfill_last_used
-
-# Preview changes without modifying database
-python -m src.scripts.backfill_last_used --dry-run
-
-# Enable verbose logging
-python -m src.scripts.backfill_last_used --verbose
+source venv/bin/activate
+python -m src.database.database  # Setup database and run migrations
 ```
 
-**Purpose**: Updates `last_used` timestamps for all entities by finding their most recent game appearance. Useful for data quality assurance and correcting temporal tracking.
+### Basic Usage
 
-### When to Use
+```bash
+python -m src.scripts.wnba_data_manager COMMAND [OPTIONS]
+```
 
-- **First Used**: Run once after implementing temporal tracking to backfill legacy entities
-- **Last Used**: Run periodically to ensure timestamp accuracy or after data corrections
+### Available Commands
 
-These timestamps are automatically maintained by the population system for new data, but these scripts handle historical data that predates the temporal tracking feature.
+#### Combined Operations (Scrape + Populate)
+
+```bash
+# Scrape specific games and immediately populate them
+python -m src.scripts.wnba_data_manager scrape-populate-games --game-ids 1022400001 1022400002
+
+# Scrape entire season and populate (recommended workflow)
+python -m src.scripts.wnba_data_manager scrape-populate-season --season 2024
+
+# Test with limited games
+python -m src.scripts.wnba_data_manager scrape-populate-season --season 2024 --max-games 10
+```
+
+#### Data Verification and Updates
+
+```bash
+# Re-scrape games to check for changes, update if different, then re-populate
+python -m src.scripts.wnba_data_manager verify-repopulate --game-ids 1022400001 1022400002
+
+# Verify and repopulate entire season
+python -m src.scripts.wnba_data_manager verify-repopulate-season --season 2024
+
+# Verify season with game type and limits
+python -m src.scripts.wnba_data_manager verify-repopulate-season --season 2024 --game-type playoff --max-games 20
+
+# Complete refresh: re-scrape, clear existing data, and re-populate
+python -m src.scripts.wnba_data_manager full-refresh --game-ids 1022400001
+```
+
+#### Individual Operations
+
+```bash
+# Only scraping (delegates to scraper_manager)
+python -m src.scripts.wnba_data_manager scrape-only --season 2024
+python -m src.scripts.wnba_data_manager scrape-only --game-ids 1022400001 1022400002
+
+# Only population (delegates to populate_game_tables)
+python -m src.scripts.wnba_data_manager populate-only --season 2024
+python -m src.scripts.wnba_data_manager populate-only --game-ids 1022400001 1022400002
+```
+
+### Command Options
+
+| Option | Description | Example |
+|--------|-------------|---------|
+| `--season YEAR` | WNBA season year | `--season 2024` |
+| `--game-type TYPE` | Game type: `regular` or `playoff` (default: regular) | `--game-type playoff` |
+| `--game-ids ID [ID...]` | Specific game IDs to process | `--game-ids 1022400001 1022400002` |
+| `--max-games N` | Maximum number of games to process | `--max-games 10` |
+| `--override` | Override existing data | `--override` |
+| `--clear-tables` | Clear all populated tables before processing | `--clear-tables` |
+| `--validate` | Validate foreign key integrity after population | `--validate` |
+| `--verbose, -v` | Enable verbose logging | `--verbose` |
+| `--dry-run` | Show what would be processed without actual processing | `--dry-run` |
+
+### Workflow Examples
+
+#### Production Workflows
+
+```bash
+# Process complete season from scratch
+python -m src.scripts.wnba_data_manager scrape-populate-season --season 2024 --validate
+
+# Update specific games with fresh data
+python -m src.scripts.wnba_data_manager verify-repopulate --game-ids 1022400001 1022400002
+
+# Verify and update entire season
+python -m src.scripts.wnba_data_manager verify-repopulate-season --season 2024 --validate
+
+# Start fresh with clean tables
+python -m src.scripts.wnba_data_manager scrape-populate-season --season 2024 --clear-tables --validate
+```
+
+#### Development/Testing
+
+```bash
+# Test with limited games and dry run
+python -m src.scripts.wnba_data_manager scrape-populate-games --game-ids 1022400001 --dry-run
+
+# Process small dataset for testing
+python -m src.scripts.wnba_data_manager scrape-populate-season --season 2024 --max-games 5 --verbose
+
+# Full refresh for troubleshooting
+python -m src.scripts.wnba_data_manager full-refresh --game-ids 1022400001 --verbose
+```
+
+#### Data Quality Workflows
+
+```bash
+# Check for updated game data and fix any issues (specific games)
+python -m src.scripts.wnba_data_manager verify-repopulate --game-ids 1022400001 1022400002
+
+# Check for updated game data across entire season
+python -m src.scripts.wnba_data_manager verify-repopulate-season --season 2024
+
+# Complete data refresh when major issues detected
+python -m src.scripts.wnba_data_manager full-refresh --game-ids 1022400001
+
+# Re-populate only (when raw data is good but populated data needs updating)
+python -m src.scripts.wnba_data_manager populate-only --game-ids 1022400001 --override
+```
+
+### Output
+
+The unified manager provides comprehensive statistics for both phases:
+
+```bash
+Scrape-and-Populate Results:
+  SCRAPING:
+    Total: 5
+    Success: 5
+    Failed: 0
+    Skipped: 0
+  POPULATION:
+    Total: 5
+    Success: 5
+    Failed: 0
+
+✓ Foreign key validation passed!
+```
+
+### Key Benefits
+
+- **Simplified Workflow**: Single command for complete data pipeline
+- **Atomic Operations**: Each game processed completely or not at all
+- **Intelligent Updates**: Only update games when source data actually changes
+- **Data Quality**: Built-in validation and integrity checking
+- **Error Recovery**: Failed games don't affect successful ones
+- **Progress Tracking**: Real-time status for both scraping and population phases
+
+### Integration
+
+The unified manager coordinates:
+- `scraper_manager`: For all scraping operations
+- `populate_game_tables`: For all population operations  
+- Combined logging and session tracking
+- Unified error handling and statistics
+
+### When to Use Each Command
+
+- **`scrape-populate-*`**: New data processing workflows
+- **`verify-repopulate`**: Regular data quality checks and updates for specific games
+- **`verify-repopulate-season`**: Regular data quality checks and updates for entire seasons
+- **`full-refresh`**: When data corruption or major issues detected
+- **Individual operations**: When you need only scraping or population
