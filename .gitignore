@@ -201,3 +201,7 @@ tests/data/*.json
 
 # Pytest results
 htmlcov*/
+
+# .DS_Store
+*.DS_Store
+.DS_Store
