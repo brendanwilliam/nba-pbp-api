@@ -10,6 +10,29 @@ The WNBA scraping project focuses on:
 - **Essential Analytics**: Possession tracking and lineup analysis
 - **Data Quality**: Validation and quality assurance for scraped data
 
+## Development Philosophy
+
+This project follows a **WNBA-first development approach**:
+
+### 🏀 **Why WNBA First?**
+- **Manageable Scale**: WNBA has ~240 regular season games vs NBA's ~1,230, making it ideal for testing and iteration
+- **Lower Complexity**: Fewer total games and plays allow for faster development cycles and easier debugging
+- **Proven Foundation**: WNBA success validates our architecture before scaling to NBA's larger dataset
+- **Quality Focus**: Smaller dataset enables thorough testing of data quality, analytics, and performance
+
+### 🚀 **Development Roadmap**
+1. **Phase 1** (Current): Complete WNBA implementation with full feature set
+2. **Phase 2**: Add NBA support using proven WNBA architecture 
+3. **Phase 3**: Cross-league analytics and comparative features
+
+### 📊 **Scale Comparison**
+| League | Regular Season Games | Total Games (1997-2025) | Plays per Game |
+|--------|---------------------|--------------------------|----------------|
+| WNBA   | ~240/season         | ~6,600                   | ~400-500       |
+| NBA    | ~1,230/season       | ~35,000                  | ~400-500       |
+
+**Result**: WNBA provides the perfect testing environment at ~15% of NBA's scale, enabling rapid development and validation before enterprise-scale deployment.
+
 ## Environment Setup
 
 ### Prerequisites
