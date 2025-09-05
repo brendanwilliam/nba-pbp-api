@@ -8,14 +8,16 @@ for the scraping and analytics components.
 
 import logging
 from typing import Optional, List, Dict, Any
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.exc import SQLAlchemyError
 import os
 from dotenv import load_dotenv
+import psycopg2
 
-from .models import Base, RawGameData, ScrapingSession, DatabaseVersion
+from .models import (Base, RawGameData, ScrapingSession, DatabaseVersion, 
+                     Person, Team, Game, Boxscore, Play, Arena, PersonGame, TeamGame)
 
 load_dotenv()
 
@@ -458,6 +460,250 @@ class ScrapingSessionService:
             return []
 
 
+class PersonService:
+    """Service for managing person/player operations."""
+    
+    def __init__(self, session: Session):
+        self.session = session
+    
+    def get_player_by_id(self, person_id: int) -> Optional[Person]:
+        """Get a player by their person_id."""
+        try:
+            return self.session.query(Person).filter_by(person_id=person_id).first()
+        except SQLAlchemyError as e:
+            logger.error(f"Error retrieving player {person_id}: {e}")
+            return None
+    
+    def get_player_by_name(self, name: str) -> Optional[Person]:
+        """Get a player by their name (case-insensitive)."""
+        try:
+            return self.session.query(Person).filter(
+                Person.person_name.ilike(f"%{name}%")
+            ).first()
+        except SQLAlchemyError as e:
+            logger.error(f"Error retrieving player by name '{name}': {e}")
+            return None
+    
+    def get_all_active_players(self, cutoff_date: Optional[datetime] = None, 
+                              role: str = "player") -> List[Person]:
+        """
+        Get all active players based on last_used date.
+        
+        Args:
+            cutoff_date: Players must have last_used after this date. 
+                        Defaults to 1 year ago from now.
+            role: Player role filter (default: 'player')
+            
+        Returns:
+            List of active Person objects
+        """
+        try:
+            if cutoff_date is None:
+                cutoff_date = datetime.now(timezone.utc) - timedelta(days=365)
+            
+            return self.session.query(Person).filter(
+                Person.person_role == role,
+                Person.last_used > cutoff_date
+            ).all()
+        except SQLAlchemyError as e:
+            logger.error(f"Error retrieving active players: {e}")
+            return []
+    
+    def get_player_stats_by_season(self, person_id: int, season: int, 
+                                  game_type: str = "regular") -> List[Boxscore]:
+        """Get player stats for a specific season."""
+        try:
+            return self.session.query(Boxscore).join(Game).filter(
+                Boxscore.person_id == person_id,
+                Game.season == season,
+                Game.game_type == game_type,
+                Boxscore.box_type == "player"
+            ).all()
+        except SQLAlchemyError as e:
+            logger.error(f"Error retrieving stats for player {person_id}, season {season}: {e}")
+            return []
+    
+    def get_player_season_totals(self, person_id: int, season: int, 
+                               game_type: str = "regular") -> Optional[Dict[str, Any]]:
+        """Get aggregated season totals for a player."""
+        try:
+            from sqlalchemy import func
+            result = self.session.query(
+                func.count(Boxscore.boxscore_id).label('games_played'),
+                func.sum(Boxscore.pts).label('total_pts'),
+                func.sum(Boxscore.reb).label('total_reb'),
+                func.sum(Boxscore.ast).label('total_ast'),
+                func.sum(Boxscore.stl).label('total_stl'),
+                func.sum(Boxscore.blk).label('total_blk'),
+                func.sum(Boxscore.fgm).label('total_fgm'),
+                func.sum(Boxscore.fga).label('total_fga'),
+                func.sum(Boxscore.tpm).label('total_3pm'),
+                func.sum(Boxscore.tpa).label('total_3pa'),
+                func.sum(Boxscore.ftm).label('total_ftm'),
+                func.sum(Boxscore.fta).label('total_fta'),
+                func.sum(Boxscore.to).label('total_to'),
+                func.sum(Boxscore.pf).label('total_pf')
+            ).join(Game).filter(
+                Boxscore.person_id == person_id,
+                Game.season == season,
+                Game.game_type == game_type,
+                Boxscore.box_type == "player"
+            ).first()
+            
+            if result and result.games_played:
+                return {
+                    'person_id': person_id,
+                    'season': season,
+                    'game_type': game_type,
+                    'games_played': result.games_played,
+                    'pts': result.total_pts or 0,
+                    'reb': result.total_reb or 0,
+                    'ast': result.total_ast or 0,
+                    'stl': result.total_stl or 0,
+                    'blk': result.total_blk or 0,
+                    'fgm': result.total_fgm or 0,
+                    'fga': result.total_fga or 0,
+                    'fg_pct': round((result.total_fgm / result.total_fga * 100) if result.total_fga else 0, 1),
+                    'tpm': result.total_3pm or 0,
+                    'tpa': result.total_3pa or 0,
+                    'tp_pct': round((result.total_3pm / result.total_3pa * 100) if result.total_3pa else 0, 1),
+                    'ftm': result.total_ftm or 0,
+                    'fta': result.total_fta or 0,
+                    'ft_pct': round((result.total_ftm / result.total_fta * 100) if result.total_fta else 0, 1),
+                    'to': result.total_to or 0,
+                    'pf': result.total_pf or 0,
+                    'ppg': round((result.total_pts / result.games_played) if result.games_played else 0, 1),
+                    'rpg': round((result.total_reb / result.games_played) if result.games_played else 0, 1),
+                    'apg': round((result.total_ast / result.games_played) if result.games_played else 0, 1)
+                }
+            return None
+        except SQLAlchemyError as e:
+            logger.error(f"Error calculating season totals for player {person_id}: {e}")
+            return None
+
+
+class TeamService:
+    """Service for managing team operations."""
+    
+    def __init__(self, session: Session):
+        self.session = session
+    
+    def get_team_by_id(self, team_id: int) -> Optional[Team]:
+        """Get a team by their team_id."""
+        try:
+            return self.session.query(Team).filter_by(team_id=team_id).first()
+        except SQLAlchemyError as e:
+            logger.error(f"Error retrieving team {team_id}: {e}")
+            return None
+    
+    def get_team_by_tricode(self, tricode: str) -> Optional[Team]:
+        """Get a team by their tricode (e.g., 'LAS', 'NY')."""
+        try:
+            return self.session.query(Team).filter_by(team_tricode=tricode).first()
+        except SQLAlchemyError as e:
+            logger.error(f"Error retrieving team by tricode '{tricode}': {e}")
+            return None
+    
+    def get_all_teams(self) -> List[Team]:
+        """Get all teams."""
+        try:
+            return self.session.query(Team).all()
+        except SQLAlchemyError as e:
+            logger.error(f"Error retrieving all teams: {e}")
+            return []
+    
+    def get_all_active_teams(self, cutoff_date: Optional[datetime] = None) -> List[Team]:
+        """
+        Get all active teams based on last_used date.
+        
+        Args:
+            cutoff_date: Teams must have last_used after this date. 
+                        Defaults to 1 year ago from now.
+            
+        Returns:
+            List of active Team objects
+        """
+        try:
+            if cutoff_date is None:
+                cutoff_date = datetime.now(timezone.utc) - timedelta(days=365)
+            
+            return self.session.query(Team).filter(
+                Team.last_used > cutoff_date
+            ).all()
+        except SQLAlchemyError as e:
+            logger.error(f"Error retrieving active teams: {e}")
+            return []
+    
+    def get_team_games_by_season(self, team_id: int, season: int, 
+                               game_type: str = "regular") -> List[Game]:
+        """Get all games for a team in a specific season."""
+        try:
+            return self.session.query(Game).join(TeamGame).filter(
+                TeamGame.team_id == team_id,
+                Game.season == season,
+                Game.game_type == game_type
+            ).all()
+        except SQLAlchemyError as e:
+            logger.error(f"Error retrieving games for team {team_id}, season {season}: {e}")
+            return []
+    
+    def get_team_stats_by_season(self, team_id: int, season: int, 
+                               game_type: str = "regular") -> Optional[Dict[str, Any]]:
+        """Get aggregated team stats for a season."""
+        try:
+            from sqlalchemy import func
+            result = self.session.query(
+                func.count(Game.game_id).label('games_played'),
+                func.sum(Boxscore.pts).label('total_pts'),
+                func.sum(Boxscore.reb).label('total_reb'),
+                func.sum(Boxscore.ast).label('total_ast'),
+                func.sum(Boxscore.stl).label('total_stl'),
+                func.sum(Boxscore.blk).label('total_blk'),
+                func.sum(Boxscore.fgm).label('total_fgm'),
+                func.sum(Boxscore.fga).label('total_fga'),
+                func.sum(Boxscore.tpm).label('total_3pm'),
+                func.sum(Boxscore.tpa).label('total_3pa'),
+                func.sum(Boxscore.ftm).label('total_ftm'),
+                func.sum(Boxscore.fta).label('total_fta'),
+                func.sum(Boxscore.to).label('total_to')
+            ).join(Game).filter(
+                Boxscore.team_id == team_id,
+                Game.season == season,
+                Game.game_type == game_type,
+                Boxscore.box_type == "starters"  # Team totals usually in starters
+            ).first()
+            
+            if result and result.games_played:
+                return {
+                    'team_id': team_id,
+                    'season': season,
+                    'game_type': game_type,
+                    'games_played': result.games_played,
+                    'pts': result.total_pts or 0,
+                    'reb': result.total_reb or 0,
+                    'ast': result.total_ast or 0,
+                    'stl': result.total_stl or 0,
+                    'blk': result.total_blk or 0,
+                    'fgm': result.total_fgm or 0,
+                    'fga': result.total_fga or 0,
+                    'fg_pct': round((result.total_fgm / result.total_fga * 100) if result.total_fga else 0, 1),
+                    'tpm': result.total_3pm or 0,
+                    'tpa': result.total_3pa or 0,
+                    'tp_pct': round((result.total_3pm / result.total_3pa * 100) if result.total_3pa else 0, 1),
+                    'ftm': result.total_ftm or 0,
+                    'fta': result.total_fta or 0,
+                    'ft_pct': round((result.total_ftm / result.total_fta * 100) if result.total_fta else 0, 1),
+                    'to': result.total_to or 0,
+                    'ppg': round((result.total_pts / result.games_played) if result.games_played else 0, 1),
+                    'rpg': round((result.total_reb / result.games_played) if result.games_played else 0, 1),
+                    'apg': round((result.total_ast / result.games_played) if result.games_played else 0, 1)
+                }
+            return None
+        except SQLAlchemyError as e:
+            logger.error(f"Error calculating team stats for team {team_id}: {e}")
+            return None
+
+
 class DatabaseService:
     """Main service class that coordinates all database operations."""
     
@@ -470,6 +716,8 @@ class DatabaseService:
         self._session = self.db_connection.get_session()
         self.game_data = GameDataService(self._session)
         self.scraping_session = ScrapingSessionService(self._session)
+        self.person = PersonService(self._session)
+        self.team = TeamService(self._session)
         return self
     
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -556,3 +804,111 @@ def update_multiple_games(updates: List[Dict[str, Any]]) -> Dict[str, int]:
     """Convenience function to update multiple games in batch."""
     with DatabaseService() as db:
         return db.game_data.update_multiple_games(updates)
+
+
+# Player convenience functions
+def get_player_by_id(person_id: int) -> Optional[Person]:
+    """Convenience function to get a player by ID."""
+    with DatabaseService() as db:
+        return db.person.get_player_by_id(person_id)
+
+
+def get_player_by_name(name: str) -> Optional[Person]:
+    """Convenience function to get a player by name."""
+    with DatabaseService() as db:
+        return db.person.get_player_by_name(name)
+
+
+def get_player_season_stats(person_id: int, season: int, 
+                          game_type: str = "regular") -> Optional[Dict[str, Any]]:
+    """Convenience function to get player season totals."""
+    with DatabaseService() as db:
+        return db.person.get_player_season_totals(person_id, season, game_type)
+
+
+def get_player_games(person_id: int, season: int, 
+                   game_type: str = "regular") -> List[Boxscore]:
+    """Convenience function to get all games for a player in a season."""
+    with DatabaseService() as db:
+        return db.person.get_player_stats_by_season(person_id, season, game_type)
+
+
+# Team convenience functions
+def get_team_by_id(team_id: int) -> Optional[Team]:
+    """Convenience function to get a team by ID."""
+    with DatabaseService() as db:
+        return db.team.get_team_by_id(team_id)
+
+
+def get_team_by_tricode(tricode: str) -> Optional[Team]:
+    """Convenience function to get a team by tricode."""
+    with DatabaseService() as db:
+        return db.team.get_team_by_tricode(tricode)
+
+
+def get_team_season_stats(team_id: int, season: int, 
+                        game_type: str = "regular") -> Optional[Dict[str, Any]]:
+    """Convenience function to get team season stats."""
+    with DatabaseService() as db:
+        return db.team.get_team_stats_by_season(team_id, season, game_type)
+
+
+def get_all_teams() -> List[Team]:
+    """Convenience function to get all teams."""
+    with DatabaseService() as db:
+        return db.team.get_all_teams()
+
+
+def get_all_active_players(cutoff_date: Optional[datetime] = None, 
+                          role: str = "player") -> List[Person]:
+    """Convenience function to get all active players."""
+    with DatabaseService() as db:
+        return db.person.get_all_active_players(cutoff_date, role)
+
+
+def get_all_active_teams(cutoff_date: Optional[datetime] = None) -> List[Team]:
+    """Convenience function to get all active teams."""
+    with DatabaseService() as db:
+        return db.team.get_all_active_teams(cutoff_date)
+
+
+# Analytics convenience functions
+def compare_players_by_season(player_ids: List[int], season: int, 
+                            game_type: str = "regular") -> List[Dict[str, Any]]:
+    """Compare multiple players' stats for a season."""
+    results = []
+    with DatabaseService() as db:
+        for player_id in player_ids:
+            stats = db.person.get_player_season_totals(player_id, season, game_type)
+            if stats:
+                player = db.person.get_player_by_id(player_id)
+                if player:
+                    stats['player_name'] = player.person_name
+                results.append(stats)
+    return results
+
+
+def get_season_leaders(season: int, stat: str, game_type: str = "regular", 
+                      limit: int = 10) -> List[Dict[str, Any]]:
+    """Get season leaders for a specific stat."""
+    # This would require more complex aggregation - placeholder for now
+    # Implementation would aggregate stats and order by the specified stat
+    with DatabaseService() as db:
+        # Would implement proper aggregation query here
+        return []
+
+
+def get_head_to_head_stats(team1_id: int, team2_id: int, season: int, 
+                          game_type: str = "regular") -> Dict[str, Any]:
+    """Get head-to-head stats between two teams for a season."""
+    with DatabaseService() as db:
+        # Would implement head-to-head comparison logic here
+        return {
+            'team1_id': team1_id,
+            'team2_id': team2_id,
+            'season': season,
+            'game_type': game_type,
+            'games_played': 0,  # Placeholder
+            'team1_wins': 0,
+            'team2_wins': 0
+        }

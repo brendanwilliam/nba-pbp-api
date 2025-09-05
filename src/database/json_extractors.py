@@ -121,6 +121,20 @@ class GameExtractor:
         game_id = int(boxscore['gameId'])
         game_metadata = parse_game_id(game_id)
         
+        # Extract final scores and determine winner
+        final_home_score = boxscore['homeTeam'].get('score')
+        final_away_score = boxscore['awayTeam'].get('score')
+        home_team_id = boxscore['homeTeam']['teamId']
+        away_team_id = boxscore['awayTeam']['teamId']
+        
+        winner = None
+        if final_home_score is not None and final_away_score is not None:
+            if final_home_score > final_away_score:
+                winner = home_team_id
+            elif final_away_score > final_home_score:
+                winner = away_team_id
+            # Leave winner as None for ties (extremely rare in basketball)
+        
         return {
             'game_id': game_id,
             'game_code': boxscore.get('gameCode'),
@@ -137,7 +151,10 @@ class GameExtractor:
             'game_label': boxscore.get('gameLabel'),
             'game_attendance': boxscore.get('attendance'),
             'season': game_metadata['season'],
-            'game_type': game_metadata['game_type']
+            'game_type': game_metadata['game_type'],
+            'final_home_score': final_home_score,
+            'final_away_score': final_away_score,
+            'winner': winner
         }
 
 
@@ -544,5 +561,25 @@ class BoxscoreExtractor:
                         entry[db_column] = int(value)
                     except (ValueError, TypeError):
                         entry[db_column] = None
+        
+        # Calculate efg and tsp
+        fgm = entry.get('fgm', 0) or 0
+        tpm = entry.get('tpm', 0) or 0  
+        fga = entry.get('fga', 0) or 0
+        pts = entry.get('pts', 0) or 0
+        fta = entry.get('fta', 0) or 0
+        
+        # Effective FG% - (fgm + 0.5 * tpm) / fga
+        if fga > 0:
+            entry['efg'] = (fgm + 0.5 * tpm) / fga
+        else:
+            entry['efg'] = None
+        
+        # True Shooting % - pts / (2 * (fga + 0.44 * fta))
+        denominator = 2 * (fga + 0.44 * fta)
+        if denominator > 0:
+            entry['tsp'] = pts / denominator
+        else:
+            entry['tsp'] = None
         
         return entry

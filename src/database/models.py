@@ -138,6 +138,9 @@ class Game(Base):
     game_attendance = Column(Integer)
     season = Column(Integer)
     game_type = Column(String(20))
+    final_home_score = Column(Integer)  # Final home team score
+    final_away_score = Column(Integer)  # Final away team score
+    winner = Column(Integer)  # team_id of the winning team
     
     # Relationships
     arena = relationship("Arena", back_populates="games")
@@ -252,6 +255,8 @@ class Boxscore(Base):
     pf = Column(Integer)
     orebs = Column(Integer)
     drebs = Column(Integer)
+    efg = Column(Float)  # Effective FG%: (fgm + 0.5 * tpm) / fga
+    tsp = Column(Float)  # True Shooting %: pts / (2 * (fga + 0.44 * fta))
     
     # Relationships
     game = relationship("Game", back_populates="boxscores")
